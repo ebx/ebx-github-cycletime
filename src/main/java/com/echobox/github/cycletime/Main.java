@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
@@ -61,16 +62,22 @@ public class Main {
   private static final Logger LOGGER = LogManager.getLogger();
   
   private static final String ISO_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS zzz";
-  private static final SimpleDateFormat sdf = new SimpleDateFormat(ISO_FORMAT);
+  private static final SimpleDateFormat fullFormat = new SimpleDateFormat(ISO_FORMAT);
+  private static final SimpleDateFormat monthOnlyFormat = new SimpleDateFormat("MM");
   private static final TimeZone UTC_TZ = TimeZone.getTimeZone("UTC");
   
   private static final Set<GHPullRequestReviewState> STATES_COUNTED_FOR_REVIEW =
       Sets.newHashSet(GHPullRequestReviewState.CHANGES_REQUESTED, GHPullRequestReviewState.APPROVED,
           GHPullRequestReviewState.DISMISSED);
   
+  private static final int MIN_SECS_REQUIRED_BETWEEN_REVIEWS = 15 * 60;
+  
+  private static final int MAX_SECS_CYCLE_COMPONENT = 30 * 24 * 60 * 60; //30 days
+  
   public static void main(String[] args) throws Exception {
     
-    sdf.setTimeZone(UTC_TZ);
+    fullFormat.setTimeZone(UTC_TZ);
+    monthOnlyFormat.setTimeZone(UTC_TZ);
     
     //Requires GITHUB_OAUTH=... env variable setting with token
     GitHub github = GitHubBuilder.fromEnvironment().build();
@@ -81,15 +88,15 @@ public class Main {
         "Rate limit remaining in current hour window - " + rateLimitStart.getCore().getRemaining());
     
     Writer fw = new PrintWriter("export.csv");
-    fw.write("UTCMergedDateTime,Repo,Title,PRNum,PRAuthor,CodingTimeSecs,PickupTimeSecs,"
+    fw.write("UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,PickupTimeSecs,"
         + "ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
     
     // 1664582400 Start of October
     long considerOnlyPRsMergedAfterUnixTime = 1664582400;
     
-//    GHRepository repo = ebx.getRepository("newsletters-optimisation-service");
-//    GHPullRequest pullRequest = repo.getPullRequest(993);
-//    writePRDataToFile(repo, pullRequest, fw);
+    //GHRepository repo = ebx.getRepository("ebx-linkedin-sdk");
+    //GHPullRequest pullRequest = repo.getPullRequest(218);
+    //writePRDataToFile(repo, pullRequest, fw);
     
     forAllRepos(ebx, considerOnlyPRsMergedAfterUnixTime, fw);
     
@@ -203,13 +210,23 @@ public class Main {
       List<GHPullRequestReview> allReviews = ghPullRequest.listReviews().toList().stream()
           .filter(i -> STATES_COUNTED_FOR_REVIEW.contains(i.getState()))
           .sorted(Main::compareReviewsByCreatedDate).collect(Collectors.toList());
-      
-      Date firstReviewAtDate = allReviews.stream().map(review -> {
+  
+      List<GHPullRequestReview> deDuplicatedReviews = new ArrayList<>();
+      long lastReviewMillis = 0;
+      //Remove any reviews that are too close to the previous one.
+      for(GHPullRequestReview review : allReviews) {
+        long reviewUnixTimeMillis = review.getCreatedAt().getTime();
+        if (reviewUnixTimeMillis > lastReviewMillis + (MIN_SECS_REQUIRED_BETWEEN_REVIEWS*1000)) {
+          deDuplicatedReviews.add(review);
+          lastReviewMillis = reviewUnixTimeMillis;
+        }
+      }
+
+      Date firstReviewAtDate = deDuplicatedReviews.stream().map(review -> {
         try {
           return review.getCreatedAt();
         } catch (Exception e) {
-          LOGGER.error(e);
-          return mergedAtDate;
+          throw new IllegalStateException("Failed to get createdAt time for PR", e);
         }
       }).findFirst().orElse(mergedAtDate);
       
@@ -228,28 +245,37 @@ public class Main {
           allCommits.stream().map(GHPullRequestCommitDetail.Commit::getCommitter)
               .map(GitUser::getDate).findFirst().orElse(prCreatedAtDate);
       
-      long codingTimeSecs = (codingFinishTimeMillis - firstCommitAtDate.getTime()) / 1000L;
-      long pickupTimeSecs = (firstReviewAtDate.getTime() - codingFinishTimeMillis) / 1000L;
-      long reviewTimeSecs = (mergedAtDate.getTime() - firstReviewAtDate.getTime()) / 1000L;
+      long codingTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
+          (codingFinishTimeMillis - firstCommitAtDate.getTime()) / 1000L));
+      long pickupTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
+          (firstReviewAtDate.getTime() - codingFinishTimeMillis) / 1000L));
+      long reviewTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
+          (mergedAtDate.getTime() - firstReviewAtDate.getTime()) / 1000L));
       
-      String reviewUserNameStr = allReviews.stream().map(review -> {
+      String reviewUserNameStr = deDuplicatedReviews.stream().map(review -> {
         try {
           return review.getUser();
         } catch (Exception e) {
-          LOGGER.error(e);
-          return new GHUser();
+          throw new IllegalStateException("Failed to get review user", e);
         }
       }).map(Main::getUserName).collect(Collectors.joining(","));
+
+      String repoNum = ghRepository.getName()+"-"+ghPullRequest.getNumber();
       
-      //Apostrophe not included on last field as we want this broken by name
-      fw.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n", sdf.format(mergedAtDate),
-          ghRepository.getName(), StringEscapeUtils.escapeCsv(ghPullRequest.getTitle()),
-          ghPullRequest.getNumber(),
-          getUserName(prAuthor), codingTimeSecs, pickupTimeSecs, reviewTimeSecs,
+      fw.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+          fullFormat.format(mergedAtDate),
+          monthOnlyFormat.format(mergedAtDate),
+          repoNum,
+          StringEscapeUtils.escapeCsv(ghPullRequest.getTitle()),
+          getUserName(prAuthor),
+          codingTimeSecs,
+          pickupTimeSecs,
+          reviewTimeSecs,
           reviewUserNameStr));
+      
       fw.flush();
       
-      LOGGER.debug(ghPullRequest.getTitle() + " - " + getUserName(prAuthor));
+      LOGGER.debug(repoNum + " - " + ghPullRequest.getTitle());
       
     } catch (Exception e) {
       LOGGER.error(e);
