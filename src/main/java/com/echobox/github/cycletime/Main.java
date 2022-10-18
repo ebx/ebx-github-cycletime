@@ -20,20 +20,7 @@ package com.echobox.github.cycletime;
 import com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.kohsuke.github.GHDirection;
-import org.kohsuke.github.GHIssueState;
-import org.kohsuke.github.GHOrganization;
-import org.kohsuke.github.GHPullRequest;
-import org.kohsuke.github.GHPullRequestCommitDetail;
-import org.kohsuke.github.GHPullRequestQueryBuilder;
-import org.kohsuke.github.GHPullRequestReview;
-import org.kohsuke.github.GHPullRequestReviewState;
-import org.kohsuke.github.GHRateLimit;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GHUser;
-import org.kohsuke.github.GitHub;
-import org.kohsuke.github.GitHubBuilder;
-import org.kohsuke.github.PagedIterable;
+import org.kohsuke.github.*;
 
 import java.io.FileWriter;
 import java.io.Writer;
@@ -44,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Let's download some github information!
@@ -76,10 +64,10 @@ public class Main {
     GHRepository repo = ebx.getRepository("main");
   
     FileWriter fw = new FileWriter("export.csv");
-    fw.write("UTCMergedDateTime,Repo,Title,PRNum,Author,CodingTimeSecs,PickupTimeSecs,"
-        + "ReviewTimeSecs,Reviewer1,Reviewer2,Reviewer3,Reviewer4,Reviewer5\n");
+    fw.write("UTCMergedDateTime,Repo,Title,PRNum,PRAuthor,CodingTimeSecs,PickupTimeSecs,"
+        + "ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
     
-    GHPullRequest pullRequest = repo.getPullRequest(7962);
+    GHPullRequest pullRequest = repo.getPullRequest(7952);
     processPR(repo, pullRequest, fw);
   
     //forAllRepos(ebx);
@@ -127,42 +115,56 @@ public class Main {
       }
   
       GHUser prAuthor = ghPullRequest.getUser();
-  
-      List<GHPullRequestCommitDetail.Commit> commits = ghPullRequest.listCommits().toList()
+      Date prCreatedAtDate = ghPullRequest.getCreatedAt();
+      Date mergedAtDate = ghPullRequest.getMergedAt();
+
+      List<GHPullRequestCommitDetail.Commit> allCommits = ghPullRequest.listCommits().toList()
               .stream().map(GHPullRequestCommitDetail::getCommit)
               .sorted(Comparator.comparing(c -> c.getCommitter().getDate()))
               .collect(Collectors.toList());
-  
-      Date firstCommitAtDate = commits.get(0).getCommitter().getDate();
-      
-      List<GHPullRequestReview> allReviews = ghPullRequest.listReviews().toList().stream()
-        .filter(i -> STATES_COUNTED_FOR_REVIEW.contains(i.getState()))
-        .sorted(Main::compareReviewsByCreatedDate).collect(Collectors.toList());
-  
-      List<String> reviewUsers = allReviews.stream().map(review -> {
-          try {
-            return review.getUser().getName();
-          } catch (Exception e) {
-            LOGGER.error(e);
-            return "ERROR";
-          }
-        }).collect(Collectors.toList());
-  
-      Date createdAtDate = ghPullRequest.getCreatedAt();
-      Date mergedAtDate = ghPullRequest.getMergedAt();
-      Date firstReviewAtDate = mergedAtDate;
-      
-      if (!allReviews.isEmpty()) {
-        firstReviewAtDate = allReviews.get(0).getCreatedAt();
-      }
-  
-      long codingTimeSecs = (firstReviewAtDate.getTime() - firstCommitAtDate.getTime())/1000L;
-      long reviewTimeSecs = (mergedAtDate.getTime() - firstReviewAtDate.getTime())/1000L;
-      
-      //Needs to be calculated as Max(PRCreatedTime,LastCommitBeforeFirstReview)
-      long pickupTimeSecs = 0;
 
-      String reviewersStr = reviewUsers.stream().collect(Collectors.joining(","));
+      List<GHPullRequestReview> allReviews = ghPullRequest.listReviews().toList()
+              .stream().filter(i -> STATES_COUNTED_FOR_REVIEW.contains(i.getState()))
+              .sorted(Main::compareReviewsByCreatedDate)
+              .collect(Collectors.toList());
+
+      Date firstReviewAtDate = allReviews.stream().map(review -> {
+        try {
+          return review.getCreatedAt();
+        } catch (Exception e) {
+          LOGGER.error(e);
+          return mergedAtDate;
+        }
+      }).findFirst().orElse(mergedAtDate);
+
+      Date lastCommitBeforeFirstReviewDate = allCommits.stream()
+              .map(GHPullRequestCommitDetail.Commit::getCommitter)
+              .map(GitUser::getDate)
+              .filter(c -> c.getTime() < firstReviewAtDate.getTime())
+              .reduce((a,b) -> b).orElse(firstReviewAtDate);
+
+      //Coding finishes at the later of
+      // a) the last commit before the review
+      // b) when the PR was created
+      long codingFinishTimeMillis = Math.max(lastCommitBeforeFirstReviewDate.getTime(), prCreatedAtDate.getTime());
+
+      Date firstCommitAtDate = allCommits.stream()
+              .map(GHPullRequestCommitDetail.Commit::getCommitter)
+              .map(GitUser::getDate)
+              .findFirst().orElse(prCreatedAtDate);
+
+      long codingTimeSecs = (codingFinishTimeMillis - firstCommitAtDate.getTime())/1000L;
+      long pickupTimeSecs = (firstReviewAtDate.getTime() - codingFinishTimeMillis)/1000L;
+      long reviewTimeSecs = (mergedAtDate.getTime() - firstReviewAtDate.getTime())/1000L;
+
+      String reviewUserNameStr = allReviews.stream().map(review -> {
+        try {
+          return review.getUser().getName();
+        } catch (Exception e) {
+          LOGGER.error(e);
+          return "ERROR";
+        }
+      }).collect(Collectors.joining(","));
       
       fw.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
           sdf.format(mergedAtDate),
@@ -173,7 +175,7 @@ public class Main {
           codingTimeSecs,
           pickupTimeSecs,
           reviewTimeSecs,
-          reviewersStr));
+          reviewUserNameStr));
       
       LOGGER.debug(ghPullRequest.getTitle() + " - " + prAuthor.getName());
 
