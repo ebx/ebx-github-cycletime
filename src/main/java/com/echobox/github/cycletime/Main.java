@@ -92,13 +92,15 @@ public class Main {
         + "ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
     
     // 1664582400 Start of October
+    // 1661990400 Start of Sept
     long considerOnlyPRsMergedAfterUnixTime = 1664582400;
+    long considerOnlyPRsMergedBeforeUnixTime = 1666164908;
     
     //GHRepository repo = ebx.getRepository("ebx-linkedin-sdk");
     //GHPullRequest pullRequest = repo.getPullRequest(218);
     //writePRDataToFile(repo, pullRequest, fw);
     
-    forAllRepos(ebx, considerOnlyPRsMergedAfterUnixTime, fw);
+    forAllRepos(ebx, considerOnlyPRsMergedAfterUnixTime, considerOnlyPRsMergedBeforeUnixTime, fw);
     
     GHRateLimit rateLimitEnd = github.getRateLimit();
     int usedRateLimit =
@@ -109,14 +111,16 @@ public class Main {
   }
   
   private static void forAllRepos(GHOrganization ebx, long considerOnlyPRsMergedAfterUnixTime,
-      Writer fw) {
+      long considerOnlyPRsMergedBeforeUnixTime, Writer fw) {
     PagedIterable<GHRepository> ghRepositories = ebx.listRepositories();
     ghRepositories.forEach(
-        ghRepository -> processRepo(ghRepository, considerOnlyPRsMergedAfterUnixTime, fw));
+        ghRepository -> processRepo(ghRepository, considerOnlyPRsMergedAfterUnixTime,
+            considerOnlyPRsMergedBeforeUnixTime, fw));
   }
   
   private static void processRepo(GHRepository ghRepository,
-      long considerOnlyPRsMergedAfterUnixTime, Writer fw) {
+      long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
+      Writer fw) {
     
     LOGGER.info(ghRepository.getName());
     
@@ -129,7 +133,8 @@ public class Main {
               .sort(GHPullRequestQueryBuilder.Sort.CREATED).direction(GHDirection.DESC).list()
               .iterator();
       
-      processPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime, fw, processedPRs, prsByCreated,
+      processPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
+          considerOnlyPRsMergedBeforeUnixTime, fw, processedPRs, prsByCreated,
           ghPullRequest -> {
             try {
               return ghPullRequest.getCreatedAt();
@@ -144,7 +149,8 @@ public class Main {
               .sort(GHPullRequestQueryBuilder.Sort.UPDATED).direction(GHDirection.DESC).list()
               .iterator();
       
-      processPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime, fw, processedPRs, prsByUpdated,
+      processPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
+          considerOnlyPRsMergedBeforeUnixTime, fw, processedPRs, prsByUpdated,
           ghPullRequest -> {
             try {
               return ghPullRequest.getUpdatedAt();
@@ -160,8 +166,9 @@ public class Main {
   }
   
   private static void processPRs(GHRepository ghRepository, long considerOnlyPRsMergedAfterUnixTime,
-      Writer fw, Set<Integer> processedPRs, PagedIterator<GHPullRequest> prs,
-      Function<GHPullRequest, Date> prTimeFunction) throws IOException {
+      long considerOnlyPRsMergedBeforeUnixTime, Writer fw, Set<Integer> processedPRs,
+      PagedIterator<GHPullRequest> prs, Function<GHPullRequest, Date> prTimeFunction)
+      throws IOException {
     
     while (prs.hasNext()) {
       
@@ -181,7 +188,10 @@ public class Main {
         continue;
       }
       
-      if (pr.getMergedAt().getTime() / 1000L >= considerOnlyPRsMergedAfterUnixTime) {
+      long prMergedAtUnixTime = pr.getMergedAt().getTime() / 1000L;
+      if (prMergedAtUnixTime >= considerOnlyPRsMergedAfterUnixTime
+          && prMergedAtUnixTime < considerOnlyPRsMergedBeforeUnixTime) {
+        
         writePRDataToFile(ghRepository, pr, fw);
         processedPRs.add(pr.getNumber());
       }
@@ -210,13 +220,15 @@ public class Main {
       List<GHPullRequestReview> allReviews = ghPullRequest.listReviews().toList().stream()
           .filter(i -> STATES_COUNTED_FOR_REVIEW.contains(i.getState()))
           .sorted(Main::compareReviewsByCreatedDate).collect(Collectors.toList());
-  
+
+      //Example PR that has duplicate reviews
+      //https://github.com/ebx/ebx-linkedin-sdk/pull/218
       List<GHPullRequestReview> deDuplicatedReviews = new ArrayList<>();
       long lastReviewMillis = 0;
       //Remove any reviews that are too close to the previous one.
-      for(GHPullRequestReview review : allReviews) {
+      for (GHPullRequestReview review : allReviews) {
         long reviewUnixTimeMillis = review.getCreatedAt().getTime();
-        if (reviewUnixTimeMillis > lastReviewMillis + (MIN_SECS_REQUIRED_BETWEEN_REVIEWS*1000)) {
+        if (reviewUnixTimeMillis > lastReviewMillis + (MIN_SECS_REQUIRED_BETWEEN_REVIEWS * 1000)) {
           deDuplicatedReviews.add(review);
           lastReviewMillis = reviewUnixTimeMillis;
         }
@@ -260,7 +272,7 @@ public class Main {
         }
       }).map(Main::getUserName).collect(Collectors.joining(","));
 
-      String repoNum = ghRepository.getName()+"-"+ghPullRequest.getNumber();
+      String repoNum = ghRepository.getName() + "-" + ghPullRequest.getNumber();
       
       fw.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
           fullFormat.format(mergedAtDate),
