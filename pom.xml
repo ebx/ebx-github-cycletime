@@ -11,7 +11,7 @@
 
     <groupId>com.echobox</groupId>
     <artifactId>ebx-github-cycletime</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -23,7 +23,7 @@
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
-            <url>https://raw.githubusercontent.com/ebx/ebx-linkedin-sdk/master/LICENSE</url>
+            <url>https://raw.githubusercontent.com/ebx/ebx-github-cycletime/master/LICENSE</url>
             <distribution>repo</distribution>
         </license>
     </licenses>

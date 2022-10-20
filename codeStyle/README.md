@@ -4,11 +4,11 @@
 
 * Window -> Preferences -> Java -> Code style -> Formatter :
 * And then import the file:
-* ebx-linkedin-sdk/CodeStyle/"Eclipse_EBX_Code_Style_formatter_settings.XML"
+* ebx-github-cycletime/CodeStyle/"Eclipse_EBX_Code_Style_formatter_settings.XML"
 * Then in the "Organize imports" tab :
 * Window -> Preferences -> Java -> Code style -> Organize imports
 * And then import the file:
-* ebx-linkedin-sdk/CodeStyle/"Eclipse_EBX_Code_Style_Imports.importorder"
+* ebx-github-cycletime/CodeStyle/"Eclipse_EBX_Code_Style_Imports.importorder"
 
 You can now use the formatter by either highlighting the code you want to format, or the entire
 file, and Press ctrl-shift-F. This will automatically format the code so that it complies with the
@@ -37,7 +37,7 @@ To change this to the "EchoBox style guide":
 * Window -> Preferences -> checkStyle :
 * Click : "NEW" on the right-hand side
 * Then in the drop-down menu select "External configuration file"
-* In location select ebx-linkedin-sdk/CodeStyle/"checkstyle.xml"
+* In location select ebx-github-cycletime/CodeStyle/"checkstyle.xml"
 * you can name this anything, I suggest "EbxStyle".
 * Click : OK
 * Next click on this new configurations and click "Set as default"
@@ -51,7 +51,7 @@ behave correctly.
 
 * File -> Settings -> Code style -> Java , Click: Manage -> import -> Intellj-IDEA code style XML:
 * And then import the file:
-* ebx-linkedin-sdk/CodeStyle/"Intellij_EBX_Code_Style_formatter_settings"
+* ebx-github-cycletime/CodeStyle/"Intellij_EBX_Code_Style_formatter_settings"
 
 You can now use the formatter by either highlighting the code you want to format, or the entire
 file, and Press Ctrl-Alt-L. This will automatically format the code so that it complies with the
@@ -79,7 +79,7 @@ Then to configure this plug-in to conform with "EBXStyle"
 * Settings -> Other Settings -> checkstyle
 * click on the green plus button
 * Add in the description "ebx_checks"
-* Add the checkstyle.xml File found in ebx-linkedin-sdk\CodeStyle\checkstyle.xml
+* Add the checkstyle.xml File found in ebx-github-cycletime\CodeStyle\checkstyle.xml
 * Tick the "Treat checkstyle errors as warnings" box
 * click Apply -> OK
 
