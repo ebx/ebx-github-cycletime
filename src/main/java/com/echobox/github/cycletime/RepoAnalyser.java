@@ -17,6 +17,7 @@
 
 package com.echobox.github.cycletime;
 
+import com.echobox.github.cycletime.persist.CSVPersist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHDirection;
@@ -27,7 +28,6 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterator;
 
 import java.io.IOException;
-import java.io.Writer;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
@@ -44,16 +44,16 @@ public class RepoAnalyser {
   private final GHRepository ghRepository;
   private final long considerOnlyPRsMergedAfterUnixTime;
   private final long considerOnlyPRsMergedBeforeUnixTime;
-  private final Writer csvWriter;
+  private final CSVPersist csv;
   
   public RepoAnalyser(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      Writer fw) {
+      CSVPersist csv) {
     
     this.ghRepository = ghRepository;
     this.considerOnlyPRsMergedAfterUnixTime = considerOnlyPRsMergedAfterUnixTime;
     this.considerOnlyPRsMergedBeforeUnixTime = considerOnlyPRsMergedBeforeUnixTime;
-    this.csvWriter = fw;
+    this.csv = csv;
   }
   
   public void analyseRepo() {
@@ -65,34 +65,18 @@ public class RepoAnalyser {
       
       Set<Integer> processedPRs = new HashSet<>();
       
-      //To ensure we process all relevant PRs we first have to check for those created
-      // after considerOnlyPRsMergedAfterUnixTime
-      //We then need to check for any PRs that were created ANY time before this point but
-      // updated after considerOnlyPRsMergedAfterUnixTime
-      
-      PagedIterator<GHPullRequest> prsByCreated =
-          ghRepository.queryPullRequests().state(GHIssueState.CLOSED)
-              .sort(GHPullRequestQueryBuilder.Sort.CREATED).direction(GHDirection.DESC).list()
-              .iterator();
-      
-      processMergedPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
-          considerOnlyPRsMergedBeforeUnixTime, csvWriter, processedPRs, prsByCreated,
-          ghPullRequest -> {
-            try {
-              return ghPullRequest.getCreatedAt();
-            } catch (IOException ioe) {
-              throw new IllegalStateException(
-                  "Failed to get created time of PR " + ghPullRequest.getNumber());
-            }
-          });
-      
-      PagedIterator<GHPullRequest> prsByUpdated =
+      // We use Sort.UPDATED so that we include PRs that were created at ANY time before the min
+      // merge time but likely merged within this time. If PRs get picked up that were merged
+      // before this, but updated for a different reason in the time frame of interest, they will
+      // be filtered out in processMergedPRs
+  
+      PagedIterator<GHPullRequest> prsByUpdatedIterator =
           ghRepository.queryPullRequests().state(GHIssueState.CLOSED)
               .sort(GHPullRequestQueryBuilder.Sort.UPDATED).direction(GHDirection.DESC).list()
               .iterator();
-      
+  
       processMergedPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
-          considerOnlyPRsMergedBeforeUnixTime, csvWriter, processedPRs, prsByUpdated,
+          considerOnlyPRsMergedBeforeUnixTime, csv, processedPRs, prsByUpdatedIterator,
           ghPullRequest -> {
             try {
               return ghPullRequest.getUpdatedAt();
@@ -101,7 +85,7 @@ public class RepoAnalyser {
                   "Failed to get updated time of PR " + ghPullRequest.getNumber());
             }
           });
-      
+  
     } catch (Exception e) {
       throw new IllegalStateException("Failed to process repo " + repoName, e);
     }
@@ -109,7 +93,7 @@ public class RepoAnalyser {
   
   private void processMergedPRs(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime,
-      long considerOnlyPRsMergedBeforeUnixTime, Writer fw, Set<Integer> processedPRs,
+      long considerOnlyPRsMergedBeforeUnixTime, CSVPersist csv, Set<Integer> processedPRs,
       PagedIterator<GHPullRequest> prIterator, Function<GHPullRequest, Date> prActionTimeFunc)
       throws IOException {
     
@@ -137,9 +121,9 @@ public class RepoAnalyser {
       if (prMergedAtUnixTime >= considerOnlyPRsMergedAfterUnixTime
           && prMergedAtUnixTime < considerOnlyPRsMergedBeforeUnixTime) {
         
-        PRAnalyser analyser = new PRAnalyser(ghRepository, pr);
+        PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), pr);
         analyser.analyse();
-        analyser.writeToCSV(fw);
+        csv.writeToCSV(analyser);
         
         processedPRs.add(pr.getNumber());
       }

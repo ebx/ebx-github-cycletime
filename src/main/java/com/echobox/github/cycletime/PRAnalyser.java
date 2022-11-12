@@ -18,28 +18,24 @@
 package com.echobox.github.cycletime;
 
 import com.google.common.collect.Sets;
+import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHPullRequestCommitDetail;
 import org.kohsuke.github.GHPullRequestReview;
 import org.kohsuke.github.GHPullRequestReviewState;
-import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GHUser;
 import org.kohsuke.github.GitUser;
 
 import java.io.IOException;
-import java.io.Writer;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 /**
@@ -50,11 +46,6 @@ public class PRAnalyser {
   
   private static final Logger LOGGER = LogManager.getLogger();
   
-  private static final String ISO_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS zzz";
-  private static final SimpleDateFormat fullFormat = new SimpleDateFormat(ISO_FORMAT);
-  private static final SimpleDateFormat monthOnlyFormat = new SimpleDateFormat("MM");
-  private static final TimeZone UTC_TZ = TimeZone.getTimeZone("UTC");
-  
   private static final Set<GHPullRequestReviewState> STATES_COUNTED_FOR_REVIEW =
       Sets.newHashSet(GHPullRequestReviewState.CHANGES_REQUESTED, GHPullRequestReviewState.APPROVED,
           GHPullRequestReviewState.DISMISSED);
@@ -62,37 +53,41 @@ public class PRAnalyser {
   private static final int MIN_SECS_REQUIRED_BETWEEN_REVIEWS = 15 * 60;
   
   private static final int MAX_SECS_CYCLE_COMPONENT = 30 * 24 * 60 * 60; //30 days
-  
-  private final GHRepository ghRepository;
+
   private final GHPullRequest ghPullRequest;
   
+  @Getter
+  private final String repoName;
+  @Getter
+  private Date mergedAtDate;
+  @Getter
+  private int prNum;
+  @Getter
+  private String prTitle;
+  @Getter
+  private String prAuthorStr;
+  @Getter
+  private long codingTimeSecs;
+  @Getter
+  private long pickupTimeSecs;
+  @Getter
+  private long reviewTimeSecs;
+  @Getter
+  private List<String> prReviewedByList;
+  @Getter
   private volatile boolean isAnalysed = false;
   
-  private Date mergedAtDate;
-  private String repoName;
-  private int prNum;
-  private String prTitle;
-  private String prAuthorStr;
-  private long codingTimeSecs;
-  private long pickupTimeSecs;
-  private long reviewTimeSecs;
-  private List<String> prReviewedByList;
-  
-  public PRAnalyser(GHRepository ghRepository, GHPullRequest ghPullRequest) {
-    this.ghRepository = ghRepository;
+  public PRAnalyser(String repoName, GHPullRequest ghPullRequest) {
+    this.repoName = repoName;
     this.ghPullRequest = ghPullRequest;
-  
-    ensureCSVTimezonesAreSetToUTC();
   }
-  
-  private void ensureCSVTimezonesAreSetToUTC() {
-    fullFormat.setTimeZone(UTC_TZ);
-    monthOnlyFormat.setTimeZone(UTC_TZ);
-  }
-  
+
+  /**
+   * Analyse the PR
+   * @throws IOException PR details may be lazy loaded and if that fails results in an IOException
+   */
   public void analyse() throws IOException {
-    
-    repoName = ghRepository.getName();
+
     prNum = ghPullRequest.getNumber();
     prTitle = ghPullRequest.getTitle();
     prAuthorStr = getSafeUserNameStr(ghPullRequest.getUser());
@@ -195,45 +190,6 @@ public class PRAnalyser {
     }
     
     return deDuplicatedReviews;
-  }
-  
-  /**
-   * Write the CSV header for PR analysis
-   * @param fw
-   */
-  public static void writeCSVHeader(Writer fw) throws IOException {
-    fw.write("UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,PickupTimeSecs,"
-        + "ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
-  }
-  
-  /**
-   * Write a CSV row to the provided writer for this analysed PR. Calls flush on the writer
-   * to ensure an incomplete execution still provides output.
-   * @param fw
-   * @throws IOException
-   */
-  public void writeToCSV(Writer fw) throws IOException {
-    
-    if (!isAnalysed) {
-      throw new IllegalStateException("PR has not been analysed yet.");
-    }
-    
-    String repoNum = repoName + "/" + prNum;
-    String safeCSVTitle = StringEscapeUtils.escapeCsv(prTitle);
-    String reviewUserNameStr = prReviewedByList.stream().collect(Collectors.joining(","));
-
-    fw.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
-        fullFormat.format(mergedAtDate),
-        monthOnlyFormat.format(mergedAtDate),
-        repoNum,
-        safeCSVTitle,
-        prAuthorStr,
-        codingTimeSecs,
-        pickupTimeSecs,
-        reviewTimeSecs,
-        reviewUserNameStr));
-  
-    fw.flush();
   }
   
   /**

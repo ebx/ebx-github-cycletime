@@ -17,6 +17,7 @@
 
 package com.echobox.github.cycletime;
 
+import com.echobox.github.cycletime.persist.CSVPersist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
@@ -29,6 +30,7 @@ import org.kohsuke.github.GitHubBuilder;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
+import java.util.TimeZone;
 
 /**
  * Let's download some github information!
@@ -37,7 +39,9 @@ import java.io.Writer;
 public class Main {
   
   private static final Logger LOGGER = LogManager.getLogger();
-
+  
+  private static final TimeZone persistWithTimezone = TimeZone.getTimeZone("UTC");
+  
   public static void main(String[] args) throws Exception {
 
     //Requires GITHUB_OAUTH=... env variable setting with token
@@ -51,15 +55,16 @@ public class Main {
         + rateLimitStart.getCore().getRemaining());
     
     Writer fw = new PrintWriter("export.csv");
-    PRAnalyser.writeCSVHeader(fw);
+    CSVPersist csv = new CSVPersist(fw, persistWithTimezone);
+    csv.writeCSVHeader();
     
     // 1664582400 Start of October
     // 1661990400 Start of Sept
     long considerOnlyPRsMergedAfterUnixTime = 1664582400;
-    long considerOnlyPRsMergedBeforeUnixTime = 1666164908;
+    long considerOnlyPRsMergedBeforeUnixTime = 1667260800;
   
     analyseEntireOrg(githubOrg, considerOnlyPRsMergedAfterUnixTime,
-        considerOnlyPRsMergedBeforeUnixTime, fw);
+        considerOnlyPRsMergedBeforeUnixTime, csv);
   
     //analyseSpecificPR(githubOrg, "ebx-linkedin-sdk", 218, fw);
   
@@ -74,21 +79,22 @@ public class Main {
   
   private static void analyseEntireOrg(GHOrganization githubOrg,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      Writer fw) {
+      CSVPersist csv) {
     
     OrgAnalyser orgAnalyser = new OrgAnalyser(githubOrg, considerOnlyPRsMergedAfterUnixTime,
-        considerOnlyPRsMergedBeforeUnixTime, fw);
+        considerOnlyPRsMergedBeforeUnixTime, csv);
     orgAnalyser.analyseOrg();
   }
 
   private static void analyseSpecificPR(GHOrganization githubOrg, String repoName,
-      int prNum, Writer fw) throws IOException {
+      int prNum, CSVPersist csv) throws IOException {
     
     GHRepository repo = githubOrg.getRepository(repoName);
     GHPullRequest pullRequest = repo.getPullRequest(prNum);
-    PRAnalyser analyser = new PRAnalyser(repo, pullRequest);
+    PRAnalyser analyser = new PRAnalyser(repo.getName(), pullRequest);
     analyser.analyse();
-    analyser.writeToCSV(fw);
+    
+    csv.writeToCSV(analyser);
   }
   
 }

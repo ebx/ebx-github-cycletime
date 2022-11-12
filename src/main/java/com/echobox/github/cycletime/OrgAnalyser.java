@@ -17,13 +17,12 @@
 
 package com.echobox.github.cycletime;
 
+import com.echobox.github.cycletime.persist.CSVPersist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterable;
-
-import java.io.Writer;
 
 /**
  * Given a github organisation process all available repositories
@@ -36,22 +35,22 @@ public class OrgAnalyser {
   private final GHOrganization githubOrg;
   private final long considerOnlyPRsMergedAfterUnixTime;
   private final long considerOnlyPRsMergedBeforeUnixTime;
-  private final Writer csvWriter;
+  private final CSVPersist csv;
   
   public OrgAnalyser(GHOrganization githubOrg, long considerOnlyPRsMergedAfterUnixTime,
-      long considerOnlyPRsMergedBeforeUnixTime, Writer csvWriter) {
+      long considerOnlyPRsMergedBeforeUnixTime, CSVPersist csv) {
   
     this.githubOrg = githubOrg;
     this.considerOnlyPRsMergedAfterUnixTime = considerOnlyPRsMergedAfterUnixTime;
     this.considerOnlyPRsMergedBeforeUnixTime = considerOnlyPRsMergedBeforeUnixTime;
-    this.csvWriter = csvWriter;
+    this.csv = csv;
   }
 
   public void analyseOrg() {
     PagedIterable<GHRepository> ghRepositories = githubOrg.listRepositories();
     ghRepositories.forEach(ghRepository -> {
       RepoAnalyser repoAnalyser = new RepoAnalyser(ghRepository, considerOnlyPRsMergedAfterUnixTime,
-          considerOnlyPRsMergedBeforeUnixTime, csvWriter);
+          considerOnlyPRsMergedBeforeUnixTime, csv);
       repoAnalyser.analyseRepo();
     });
   }
