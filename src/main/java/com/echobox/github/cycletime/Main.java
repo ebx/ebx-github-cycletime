@@ -17,7 +17,10 @@
 
 package com.echobox.github.cycletime;
 
+import com.echobox.github.cycletime.analyse.OrgAnalyser;
+import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.persist.CSVPersist;
+import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
@@ -44,6 +47,8 @@ public class Main {
   
   public static void main(String[] args) throws Exception {
 
+    LOGGER.info("Starting ...");
+    
     //Requires GITHUB_OAUTH=... env variable setting with token
     GitHub github = GitHubBuilder.fromEnvironment().build();
     
@@ -91,7 +96,7 @@ public class Main {
     
     GHRepository repo = githubOrg.getRepository(repoName);
     GHPullRequest pullRequest = repo.getPullRequest(prNum);
-    PRAnalyser analyser = new PRAnalyser(repo.getName(), pullRequest);
+    PRAnalyser analyser = new PRAnalyser(repo.getName(), new PullRequestKohsuke(pullRequest));
     analyser.analyse();
     
     csv.writeToCSV(analyser);

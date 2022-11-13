@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.echobox.github.cycletime;
+package com.echobox.github.cycletime.analyse;
 
 import com.echobox.github.cycletime.persist.CSVPersist;
 import org.apache.logging.log4j.LogManager;

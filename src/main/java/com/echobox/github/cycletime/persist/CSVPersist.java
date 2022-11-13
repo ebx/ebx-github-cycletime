@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.persist;
 
-import com.echobox.github.cycletime.PRAnalyser;
+import com.echobox.github.cycletime.analyse.PRAnalyser;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

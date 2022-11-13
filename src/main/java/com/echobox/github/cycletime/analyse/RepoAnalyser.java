@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package com.echobox.github.cycletime;
+package com.echobox.github.cycletime.analyse;
 
 import com.echobox.github.cycletime.persist.CSVPersist;
+import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHDirection;
@@ -121,7 +122,7 @@ public class RepoAnalyser {
       if (prMergedAtUnixTime >= considerOnlyPRsMergedAfterUnixTime
           && prMergedAtUnixTime < considerOnlyPRsMergedBeforeUnixTime) {
         
-        PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), pr);
+        PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), new PullRequestKohsuke(pr));
         analyser.analyse();
         csv.writeToCSV(analyser);
         
