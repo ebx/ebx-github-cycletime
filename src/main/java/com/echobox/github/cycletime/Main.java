@@ -84,7 +84,7 @@ public class Main {
   
   private static void analyseEntireOrg(GHOrganization githubOrg,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      CSVPersist csv) {
+      CSVPersist csv) throws IOException {
     
     OrgAnalyser orgAnalyser = new OrgAnalyser(githubOrg, considerOnlyPRsMergedAfterUnixTime,
         considerOnlyPRsMergedBeforeUnixTime, csv);

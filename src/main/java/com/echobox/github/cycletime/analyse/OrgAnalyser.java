@@ -24,6 +24,8 @@ import org.kohsuke.github.GHOrganization;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterable;
 
+import java.io.IOException;
+
 /**
  * Given a github organisation process all available repositories
  * @author MarcF
@@ -46,9 +48,9 @@ public class OrgAnalyser {
     this.csv = csv;
   }
 
-  public void analyseOrg() {
+  public void analyseOrg() throws IOException {
     PagedIterable<GHRepository> ghRepositories = githubOrg.listRepositories();
-    ghRepositories.forEach(ghRepository -> {
+    ghRepositories.toList().parallelStream().forEach(ghRepository -> {
       RepoAnalyser repoAnalyser = new RepoAnalyser(ghRepository, considerOnlyPRsMergedAfterUnixTime,
           considerOnlyPRsMergedBeforeUnixTime, csv);
       repoAnalyser.analyseRepo();

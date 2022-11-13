@@ -53,7 +53,7 @@ public class CSVPersist {
    * Write the CSV header for PR analysis
    * @throws IOException If the write fails
    */
-  public void writeCSVHeader() throws IOException {
+  public synchronized void writeCSVHeader() throws IOException {
     csvWriter.write("UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,"
         + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
   }
@@ -64,7 +64,7 @@ public class CSVPersist {
    * @param  analyser The PRAnalyser
    * @throws IOException If the write fails
    */
-  public void writeToCSV(PRAnalyser analyser) throws IOException {
+  public synchronized void writeToCSV(PRAnalyser analyser) throws IOException {
     
     if (!analyser.isAnalysed()) {
       throw new IllegalStateException("PR has not been analysed yet.");
