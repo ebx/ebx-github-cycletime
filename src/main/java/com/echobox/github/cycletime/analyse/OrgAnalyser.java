@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.analyse;
 
-import com.echobox.github.cycletime.data.CSVPersist;
+import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
@@ -37,10 +37,10 @@ public class OrgAnalyser {
   private final GHOrganization githubOrg;
   private final long considerOnlyPRsMergedAfterUnixTime;
   private final long considerOnlyPRsMergedBeforeUnixTime;
-  private final CSVPersist csv;
+  private final PullRequestCSVDAO csv;
   
   public OrgAnalyser(GHOrganization githubOrg, long considerOnlyPRsMergedAfterUnixTime,
-      long considerOnlyPRsMergedBeforeUnixTime, CSVPersist csv) {
+      long considerOnlyPRsMergedBeforeUnixTime, PullRequestCSVDAO csv) {
   
     this.githubOrg = githubOrg;
     this.considerOnlyPRsMergedAfterUnixTime = considerOnlyPRsMergedAfterUnixTime;

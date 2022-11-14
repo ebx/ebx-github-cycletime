@@ -43,7 +43,7 @@ import java.util.stream.StreamSupport;
  * Persist analysis to CSV files
  * @author MarcF
  */
-public class CSVPersist implements AutoCloseable {
+public class PullRequestCSVDAO implements AutoCloseable {
   
   private static final Logger LOGGER = LogManager.getLogger();
 
@@ -54,7 +54,7 @@ public class CSVPersist implements AutoCloseable {
   private final Writer csvWriter;
   private final Reader csvReader;
   
-  public CSVPersist(String filename, TimeZone persistWithTimezone, boolean append)
+  public PullRequestCSVDAO(String filename, TimeZone persistWithTimezone, boolean append)
       throws IOException {
     
     this.csvWriter = new PrintWriter(new FileWriter(filename, append));

@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.analyse;
 
-import com.echobox.github.cycletime.data.CSVPersist;
+import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,11 +45,11 @@ public class RepoAnalyser {
   private final GHRepository ghRepository;
   private final long considerOnlyPRsMergedAfterUnixTime;
   private final long considerOnlyPRsMergedBeforeUnixTime;
-  private final CSVPersist csv;
+  private final PullRequestCSVDAO csv;
   
   public RepoAnalyser(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      CSVPersist csv) {
+      PullRequestCSVDAO csv) {
     
     this.ghRepository = ghRepository;
     this.considerOnlyPRsMergedAfterUnixTime = considerOnlyPRsMergedAfterUnixTime;
@@ -94,7 +94,7 @@ public class RepoAnalyser {
   
   private void processMergedPRs(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime,
-      long considerOnlyPRsMergedBeforeUnixTime, CSVPersist csv, Set<Integer> processedPRs,
+      long considerOnlyPRsMergedBeforeUnixTime, PullRequestCSVDAO csv, Set<Integer> processedPRs,
       PagedIterator<GHPullRequest> prIterator, Function<GHPullRequest, Date> prActionTimeFunc)
       throws IOException {
     

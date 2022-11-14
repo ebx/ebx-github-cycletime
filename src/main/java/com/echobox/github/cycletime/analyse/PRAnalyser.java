@@ -108,8 +108,8 @@ public class PRAnalyser {
   
     Date firstCommitAtDate = getFirstCommitDate(commits).orElse(prCreatedAtDate);
   
-    //A lower limit of zero is to protect against things getting out of sync with forcepushes
-    //An upper limit is to protect against single anomoylous PRs throwing out further analysis.
+    //A lower limit of zero is to protect against things getting out of sync with force pushes.
+    //An upper limit is to protect against single anomalous PRs throwing out future analysis.
     
     codingTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
         (codingFinishTimeMillis - firstCommitAtDate.getTime()) / 1000L));

@@ -20,8 +20,9 @@ package com.echobox.github.cycletime;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.data.AnalysedPR;
-import com.echobox.github.cycletime.data.CSVPersist;
+import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
+import com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
@@ -48,11 +49,15 @@ public class Main {
   private static final TimeZone persistWithTimezone = TimeZone.getTimeZone("UTC");
   private static final String RAW_CSV_FILENAME = "export.csv";
   private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
+  private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
+      "export_sorted_by_mergedate_filteredauthors.csv";
+  
+  private static final List<String> AUTHORS_TO_FILTEROUT = Lists.newArrayList("^dependabot.*");
   
   public static void main(String[] args) throws Exception {
 
     LOGGER.info("Starting ...");
-  
+
     //performAnalyse();
     performAggregate();
   
@@ -70,7 +75,9 @@ public class Main {
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
     
-    try (CSVPersist csv = new CSVPersist(RAW_CSV_FILENAME, persistWithTimezone, false)) {
+    try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
+        false)) {
+      
       csv.writeCSVHeader();
   
       // 1664582400 Start of October
@@ -93,7 +100,7 @@ public class Main {
   
   private static void analyseEntireOrg(GHOrganization githubOrg,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      CSVPersist csv) throws IOException {
+      PullRequestCSVDAO csv) throws IOException {
     
     OrgAnalyser orgAnalyser = new OrgAnalyser(githubOrg, considerOnlyPRsMergedAfterUnixTime,
         considerOnlyPRsMergedBeforeUnixTime, csv);
@@ -101,7 +108,7 @@ public class Main {
   }
 
   private static void analyseSpecificPR(GHOrganization githubOrg, String repoName,
-      int prNum, CSVPersist csv) throws IOException {
+      int prNum, PullRequestCSVDAO csv) throws IOException {
     
     GHRepository repo = githubOrg.getRepository(repoName);
     GHPullRequest pullRequest = repo.getPullRequest(prNum);
@@ -112,19 +119,43 @@ public class Main {
   }
 
   private static void performAggregate() throws Exception {
-    try (CSVPersist csv = new CSVPersist(RAW_CSV_FILENAME, persistWithTimezone, true)) {
+    try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
+        true)) {
+      
       List<AnalysedPR> analysedPRs = csv.loadAllData();
       
       LOGGER.debug("Loaded " + analysedPRs.size() + " PRs");
       
       List<AnalysedPR> sorted = analysedPRs.stream()
+          .filter(Main::testAuthorFilterList)
           .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
           .collect(Collectors.toList());
       
-      try (CSVPersist csvOut = new CSVPersist(SORTED_CSV_FILENAME, persistWithTimezone, false)) {
+      try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
+          persistWithTimezone, false)) {
         csvOut.writeCSVHeader();
         csvOut.writeToCSV(sorted);
       }
+  
+      List<AnalysedPR> sortedFilteredAuthors = analysedPRs.stream()
+          .filter(pr -> !testAuthorFilterList(pr))
+          .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
+          .collect(Collectors.toList());
+  
+      try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME_FILTERED_AUTHORS,
+          persistWithTimezone, false)) {
+        csvOut.writeCSVHeader();
+        csvOut.writeToCSV(sortedFilteredAuthors);
+      }
     }
+  }
+  
+  private static boolean testAuthorFilterList(AnalysedPR pr) {
+    for (String regex : AUTHORS_TO_FILTEROUT) {
+      if (pr.getPrAuthorStr().matches(regex)) {
+        return false;
+      }
+    }
+    return true;
   }
 }
