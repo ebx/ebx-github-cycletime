@@ -46,8 +46,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -208,17 +211,23 @@ public class Main {
       resultMap.put(squad, buckets);
     }
 
+    Map<String, AtomicInteger> authorsSeenCount = new HashMap<>();
+    
     for (AnalysedPR pr : prsToAggregate) {
       //Find the right author and add values to the correct bucket
       ZonedDateTime mergedDateTime = pr.getMergedAtDate().withZoneSameInstant(persistWithTimezone);
       long daysDiff = ChronoUnit.DAYS.between(startAtMidnight, mergedDateTime);
       
-      List<String> authorSquads = authorsToSquad.get(pr.getPrAuthorStr());
-      if (authorSquads == null) {
+      String author = pr.getPrAuthorStr();
+      List<String> authorInSquads = authorsToSquad.get(author);
+      authorsSeenCount.computeIfAbsent(author, k -> new AtomicInteger(0));
+      if (authorInSquads == null || authorInSquads.isEmpty()) {
         continue;
+      } else{
+        authorsSeenCount.get(author).incrementAndGet();
       }
       
-      for (String squad : authorSquads) {
+      for (String squad : authorInSquads) {
         CycleTimeBucket bucket = resultMap.get(squad).get((int) daysDiff);
         if (bucket.getStartDateTime().isBefore(pr.getMergedAtDate())
             && bucket.getEndDateTime().isAfter(pr.getMergedAtDate())) {
@@ -229,47 +238,55 @@ public class Main {
       }
     }
     
-    //Setup headers
+    //Setup headers and save out the buckets
     String isoFormat = "yyyy-MM-dd";
     DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern(isoFormat);
     List<String> headers = Lists.newArrayList("", "CodingTimeSecs", "PickupTimeSecs",
         "ReviewTimeSecs");
+    CSVFormat csvFormat = CSVFormat.Builder.create()
+        .setHeader(headers.toArray(new String[0])).build();
     
     String hoursFormat = "%.2f";
-    FileWriter out = new FileWriter("ewok_cycle_times_hours.csv");
-    CSVFormat csvFormat =
-        CSVFormat.Builder.create().setHeader(headers.toArray(new String[0])).build();
-    try (CSVPrinter printer = new CSVPrinter(out, csvFormat)) {
-      String squad = "Ewok";
+    for (String squad : distinctSquads) {
+      FileWriter out = new FileWriter(squad + "_cycle_times_hours.csv");
       
-      List<CycleTimeBucket> buckets = resultMap.get(squad);
-  
-      for (CycleTimeBucket bucket : buckets) {
-        
-        String codingTimeStr = "";
-        if (!bucket.getCodingTimeSecsValues().isEmpty()) {
-          double totalInHours = bucket.getAverageCodingTimeSecs().getAsDouble() / 3600;
-          codingTimeStr =  String.format(hoursFormat, totalInHours);
+      try (CSVPrinter printer = new CSVPrinter(out, csvFormat)) {
+
+        List<CycleTimeBucket> buckets = resultMap.get(squad);
+    
+        for (CycleTimeBucket bucket : buckets) {
+      
+          String codingTimeStr = "";
+          if (!bucket.getCodingTimeSecsValues().isEmpty()) {
+            double totalInHours = bucket.getAverageCodingTimeSecs().getAsDouble() / 3600;
+            codingTimeStr =  String.format(hoursFormat, totalInHours);
+          }
+      
+          String pickupTimeStr = "";
+          if (!bucket.getPickupTimeSecsValues().isEmpty()) {
+            double totalInHours = bucket.getAveragePickupTimeSecs().getAsDouble() / 3600;
+            pickupTimeStr = String.format(hoursFormat, totalInHours);
+          }
+      
+          String reviewTimeStr = "";
+          if (!bucket.getReviewTimeSecsValues().isEmpty()) {
+            double totalInHours = bucket.getAverageReviewTimeSecs().getAsDouble() / 3600;
+            reviewTimeStr = String.format(hoursFormat, totalInHours);
+          }
+      
+          printer.printRecord(dateTimeFormatter.format(bucket.getStartDateTime()),
+              codingTimeStr, pickupTimeStr, reviewTimeStr);
         }
-        
-        String pickupTimeStr = "";
-        if (!bucket.getPickupTimeSecsValues().isEmpty()) {
-          double totalInHours = bucket.getAveragePickupTimeSecs().getAsDouble() / 3600;
-          pickupTimeStr = String.format(hoursFormat, totalInHours);
-        }
-        
-        String reviewTimeStr = "";
-        if (!bucket.getReviewTimeSecsValues().isEmpty()) {
-          double totalInHours = bucket.getAverageReviewTimeSecs().getAsDouble() / 3600;
-          reviewTimeStr = String.format(hoursFormat, totalInHours);
-        }
-        
-        printer.printRecord(dateTimeFormatter.format(bucket.getStartDateTime()),
-            codingTimeStr, pickupTimeStr, reviewTimeStr);
       }
     }
-    
+ 
     //Don't forget about exporting anyone that is 'unassigned'.
+    List<String> authorsNeverSeenInSquad = authorsSeenCount.entrySet()
+        .stream().filter(e -> e.getValue().get() == 0)
+        .map(e -> e.getKey()).distinct().collect(Collectors.toList());
+    for (String author : authorsNeverSeenInSquad) {
+      LOGGER.warn("Never saw following author in squad " + author);
+    }
   }
   
   private static boolean matchAuthorExcludeList(AnalysedPR pr) {
