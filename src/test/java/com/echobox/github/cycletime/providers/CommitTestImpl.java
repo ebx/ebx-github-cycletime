@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.providers;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 
 /**
  * A test implementation of the Commit interface
@@ -25,14 +25,14 @@ import java.util.Date;
  */
 public class CommitTestImpl implements Commit {
 
-  private final Date commitDate;
+  private final ZonedDateTime commitDate;
 
-  public CommitTestImpl(Date commitDate) {
+  public CommitTestImpl(ZonedDateTime commitDate) {
     this.commitDate = commitDate;
   }
   
   @Override
-  public Date getCommitDate() {
+  public ZonedDateTime getCommitDate() {
     return commitDate;
   }
 }

@@ -23,7 +23,9 @@ import com.echobox.github.cycletime.providers.User;
 import org.kohsuke.github.GHPullRequestReview;
 
 import java.io.IOException;
-import java.util.Date;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 /**
  * An implementation of a PR review using the Kohsuke library
@@ -58,9 +60,10 @@ public class PRReviewKohsuke implements PRReview {
   }
   
   @Override
-  public Date getReviewCreatedAt() {
+  public ZonedDateTime getReviewCreatedAt() {
     try {
-      return review.getCreatedAt();
+      Instant instant = Instant.ofEpochMilli(review.getCreatedAt().getTime());
+      return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
     } catch (IOException e) {
       throw new IllegalStateException("Failed to extract created date from review "
           + review.getNodeId(), e);

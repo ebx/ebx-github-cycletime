@@ -34,10 +34,10 @@ import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 /**
@@ -47,8 +47,9 @@ import java.util.stream.Collectors;
 public class Main {
   
   private static final Logger LOGGER = LogManager.getLogger();
+
+  private static final ZoneId persistWithTimezone = ZoneId.of("UTC");
   
-  private static final TimeZone persistWithTimezone = TimeZone.getTimeZone("UTC");
   private static final String RAW_CSV_FILENAME = "export.csv";
   private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
   private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
@@ -157,7 +158,6 @@ public class Main {
       csvOut.writeCSVHeader();
       csvOut.writeToCSV(sortedFilteredAuthors, preferredAuthorNames);
     }
-    
   }
   
   private static boolean testAuthorFilterList(AnalysedPR pr) {

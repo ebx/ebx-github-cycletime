@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.providers;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
@@ -32,9 +32,9 @@ public interface PullRequest {
   
   User getAuthor();
   
-  Date getCreatedAt();
+  ZonedDateTime getCreatedAt();
   
-  Date getMergedAt();
+  ZonedDateTime getMergedAt();
   
   List<Commit> getCommits();
   

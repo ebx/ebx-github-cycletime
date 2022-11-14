@@ -30,13 +30,12 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.Writer;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -49,21 +48,21 @@ public class PullRequestCSVDAO implements AutoCloseable {
   
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private static final String ISO_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS zzz";
-  private static final SimpleDateFormat fullFormat = new SimpleDateFormat(ISO_FORMAT);
-  private static final SimpleDateFormat monthOnlyFormat = new SimpleDateFormat("MM");
+  private static final String ISO_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS z";
+  private static final DateTimeFormatter fullFormat = DateTimeFormatter.ofPattern(ISO_FORMAT);
+  private static final DateTimeFormatter monthOnlyFormat = DateTimeFormatter.ofPattern("MM");
 
   private final Writer csvWriter;
   private final Reader csvReader;
+  private final ZoneId persistWithTimezone;
   
-  public PullRequestCSVDAO(String filename, TimeZone persistWithTimezone, boolean append)
+  public PullRequestCSVDAO(String filename, ZoneId persistWithTimezone, boolean append)
       throws IOException {
     
     this.csvWriter = new PrintWriter(new FileWriter(filename, append));
     this.csvReader = new FileReader(filename);
-    
-    fullFormat.setTimeZone(persistWithTimezone);
-    monthOnlyFormat.setTimeZone(persistWithTimezone);
+    this.persistWithTimezone = persistWithTimezone;
+
   }
 
   /**
@@ -105,9 +104,11 @@ public class PullRequestCSVDAO implements AutoCloseable {
   
     String reviewUserNameStr = reviewedByStream.collect(Collectors.joining(","));
     
+    ZonedDateTime dtToPrint = analysedPR.getMergedAtDate().withZoneSameInstant(persistWithTimezone);
+    
     csvWriter.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
-        fullFormat.format(analysedPR.getMergedAtDate()),
-        monthOnlyFormat.format(analysedPR.getMergedAtDate()),
+        fullFormat.format(dtToPrint),
+        monthOnlyFormat.format(dtToPrint),
         repoNum,
         safeCSVTitle,
         authorName,
@@ -134,12 +135,7 @@ public class PullRequestCSVDAO implements AutoCloseable {
     String repoPRNum = record.get("Repo-PRNum");
     
     String mergedAtDateString = record.get("UTCMergedDateTime");
-    Date mergedAtDate = null;
-    try {
-      mergedAtDate = fullFormat.parse(mergedAtDateString);
-    } catch (ParseException e) {
-      throw new IllegalStateException("Failed to parse merged date " + mergedAtDateString, e);
-    }
+    ZonedDateTime mergedAtDate = ZonedDateTime.parse(mergedAtDateString, fullFormat);
   
     List<String> prReviewsBy = new ArrayList<>();
     getReviewer(prReviewsBy, record, "Review1");

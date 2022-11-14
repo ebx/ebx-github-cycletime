@@ -19,7 +19,7 @@ package com.echobox.github.cycletime.providers;
 
 import com.echobox.github.cycletime.analyse.PRReviewState;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 
 /**
  * An interface for PR reviews
@@ -29,7 +29,7 @@ public interface PRReview {
   
   PRReviewState getState();
   
-  Date getReviewCreatedAt();
+  ZonedDateTime getReviewCreatedAt();
   
   User getReviewedByUser();
   

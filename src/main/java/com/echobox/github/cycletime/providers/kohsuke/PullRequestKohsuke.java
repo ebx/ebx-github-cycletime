@@ -24,7 +24,9 @@ import com.echobox.github.cycletime.providers.User;
 import org.kohsuke.github.GHPullRequest;
 
 import java.io.IOException;
-import java.util.Date;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -60,9 +62,10 @@ public class PullRequestKohsuke implements PullRequest {
   }
   
   @Override
-  public Date getCreatedAt() {
+  public ZonedDateTime getCreatedAt() {
     try {
-      return ghPullRequest.getCreatedAt();
+      Instant instant = Instant.ofEpochMilli(ghPullRequest.getCreatedAt().getTime());
+      return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
     } catch (IOException e) {
       throw new IllegalStateException("Failed to get createdAt time for PR "
           + ghPullRequest.getNumber(), e);
@@ -70,8 +73,9 @@ public class PullRequestKohsuke implements PullRequest {
   }
   
   @Override
-  public Date getMergedAt() {
-    return ghPullRequest.getMergedAt();
+  public ZonedDateTime getMergedAt() {
+    Instant instant = Instant.ofEpochMilli(ghPullRequest.getMergedAt().getTime());
+    return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
   
   @Override

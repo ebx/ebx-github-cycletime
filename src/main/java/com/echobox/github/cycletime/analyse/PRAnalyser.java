@@ -26,9 +26,9 @@ import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -55,7 +55,7 @@ public class PRAnalyser {
   @Getter
   private final String repoName;
   @Getter
-  private Date mergedAtDate;
+  private ZonedDateTime mergedAtDate;
   @Getter
   private int prNum;
   @Getter
@@ -93,32 +93,32 @@ public class PRAnalyser {
     List<PRReview> reviews = getSortedValidAndDeduplicatedReviews(pullRequest);
 
     //PRs might occasionally be merged without a review
-    Date firstReviewAtDate = getFirstReviewDate(reviews).orElse(mergedAtDate);
- 
-    Date lastCommitBeforeFirstReviewDate = getLastCommitBeforeFirstReview(commits,
+    ZonedDateTime firstReviewAtDate = getFirstReviewDate(reviews).orElse(mergedAtDate);
+  
+    ZonedDateTime lastCommitBeforeFirstReviewDate = getLastCommitBeforeFirstReview(commits,
         firstReviewAtDate);
   
-    Date prCreatedAtDate = pullRequest.getCreatedAt();
+    ZonedDateTime prCreatedAtDate = pullRequest.getCreatedAt();
     
     //Coding finishes at the later of
     // a) the last commit before the review
     // b) when the PR was created
-    long codingFinishTimeMillis =
-        Math.max(lastCommitBeforeFirstReviewDate.getTime(), prCreatedAtDate.getTime());
+    long codingFinishUnixTime =
+        Math.max(lastCommitBeforeFirstReviewDate.toEpochSecond(), prCreatedAtDate.toEpochSecond());
   
-    Date firstCommitAtDate = getFirstCommitDate(commits).orElse(prCreatedAtDate);
+    ZonedDateTime firstCommitAtDate = getFirstCommitDate(commits).orElse(prCreatedAtDate);
   
     //A lower limit of zero is to protect against things getting out of sync with force pushes.
     //An upper limit is to protect against single anomalous PRs throwing out future analysis.
     
     codingTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
-        (codingFinishTimeMillis - firstCommitAtDate.getTime()) / 1000L));
+        codingFinishUnixTime - firstCommitAtDate.toEpochSecond()));
     
     pickupTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
-        (firstReviewAtDate.getTime() - codingFinishTimeMillis) / 1000L));
+        firstReviewAtDate.toEpochSecond() - codingFinishUnixTime));
     
     reviewTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
-        (mergedAtDate.getTime() - firstReviewAtDate.getTime()) / 1000L));
+        mergedAtDate.toEpochSecond() - firstReviewAtDate.toEpochSecond()));
   
     prReviewedByList = reviews.stream().map(r -> r.getReviewedByUser().getName())
         .collect(Collectors.toList());
@@ -129,11 +129,11 @@ public class PRAnalyser {
     return this;
   }
   
-  private static Optional<Date> getFirstReviewDate(List<PRReview> reviews) {
+  private static Optional<ZonedDateTime> getFirstReviewDate(List<PRReview> reviews) {
     return reviews.stream().map(PRReview::getReviewCreatedAt).findFirst();
   }
 
-  private static Optional<Date> getFirstCommitDate(List<Commit> allCommits) {
+  private static Optional<ZonedDateTime> getFirstCommitDate(List<Commit> allCommits) {
     return allCommits.stream().map(Commit::getCommitDate).findFirst();
   }
   
@@ -143,11 +143,11 @@ public class PRAnalyser {
             .collect(Collectors.toList());
   }
   
-  private static Date getLastCommitBeforeFirstReview(List<Commit> allCommits,
-      Date firstReviewDate) {
+  private static ZonedDateTime getLastCommitBeforeFirstReview(List<Commit> allCommits,
+      ZonedDateTime firstReviewDate) {
     return allCommits.stream()
         .map(Commit::getCommitDate)
-        .filter(c -> c.getTime() < firstReviewDate.getTime())
+        .filter(c -> c.toEpochSecond() < firstReviewDate.toEpochSecond())
         .reduce((a, b) -> b)
         .orElse(firstReviewDate);
   }
@@ -167,15 +167,15 @@ public class PRAnalyser {
         .collect(Collectors.toList());
   
     List<PRReview> deDuplicatedReviews = new ArrayList<>();
-    long lastReviewMillis = 0;
+    long lastReviewUnixTime = 0;
     //Example PR that has duplicate reviews
     //https://github.com/ebx/ebx-linkedin-sdk/pull/218
     //Aim to remove any reviews that are too close to the previous one.
     for (PRReview review : allSortedReviews) {
-      long reviewUnixTimeMillis = review.getReviewCreatedAt().getTime();
-      if (reviewUnixTimeMillis > lastReviewMillis + (MIN_SECS_REQUIRED_BETWEEN_REVIEWS * 1000)) {
+      long reviewUnixTime = review.getReviewCreatedAt().toEpochSecond();
+      if (reviewUnixTime > lastReviewUnixTime + MIN_SECS_REQUIRED_BETWEEN_REVIEWS) {
         deDuplicatedReviews.add(review);
-        lastReviewMillis = reviewUnixTimeMillis;
+        lastReviewUnixTime = reviewUnixTime;
       }
     }
     

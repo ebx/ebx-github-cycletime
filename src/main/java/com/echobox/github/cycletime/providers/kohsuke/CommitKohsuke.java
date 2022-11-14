@@ -20,7 +20,9 @@ package com.echobox.github.cycletime.providers.kohsuke;
 import com.echobox.github.cycletime.providers.Commit;
 import org.kohsuke.github.GHPullRequestCommitDetail;
 
-import java.util.Date;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 /**
  * An implementation of a commit using the Kohsuke library
@@ -35,7 +37,8 @@ public class CommitKohsuke implements Commit {
   }
 
   @Override
-  public Date getCommitDate() {
-    return commit.getCommitter().getDate();
+  public ZonedDateTime getCommitDate() {
+    Instant instant = Instant.ofEpochMilli(commit.getCommitter().getDate().getTime());
+    return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 }

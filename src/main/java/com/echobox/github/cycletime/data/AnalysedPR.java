@@ -21,7 +21,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Getter
@@ -29,23 +29,22 @@ import java.util.List;
 @AllArgsConstructor
 public class AnalysedPR {
   
-  @Getter
   private String repoName;
-  @Getter
-  private Date mergedAtDate;
-  @Getter
+  
+  private ZonedDateTime mergedAtDate;
+  
   private int prNum;
-  @Getter
+  
   private String prTitle;
-  @Getter
+  
   private String prAuthorStr;
-  @Getter
+  
   private long codingTimeSecs;
-  @Getter
+  
   private long pickupTimeSecs;
-  @Getter
+  
   private long reviewTimeSecs;
-  @Getter
+  
   private List<String> prReviewedByList;
 
 }

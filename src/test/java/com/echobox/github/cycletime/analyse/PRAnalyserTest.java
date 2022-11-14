@@ -35,8 +35,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -175,7 +176,7 @@ public class PRAnalyserTest {
     List<PRReview> filteredReviews = PRAnalyser.getSortedValidAndDeduplicatedReviews(pr);
     
     assertEquals(1, filteredReviews.size());
-    assertEquals(20 * 60, filteredReviews.get(0).getReviewCreatedAt().getTime() / 1000L);
+    assertEquals(20 * 60, filteredReviews.get(0).getReviewCreatedAt().toEpochSecond());
   }
   
   /**
@@ -183,7 +184,8 @@ public class PRAnalyserTest {
    * @param epochSeconds The seconds since epoch
    * @return A corresponding date
    */
-  private static Date getDate(long epochSeconds) {
-    return Date.from(Instant.ofEpochSecond(epochSeconds));
+  private static ZonedDateTime getDate(long epochSeconds) {
+    Instant instant = Instant.ofEpochSecond(epochSeconds);
+    return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 }

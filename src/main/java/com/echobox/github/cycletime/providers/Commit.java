@@ -17,14 +17,14 @@
 
 package com.echobox.github.cycletime.providers;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 
 /**
  * An interface for commits
  * @author MarcF
  */
 public interface Commit {
-
-  Date getCommitDate();
+  
+  ZonedDateTime getCommitDate();
   
 }

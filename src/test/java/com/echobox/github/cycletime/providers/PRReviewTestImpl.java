@@ -19,7 +19,7 @@ package com.echobox.github.cycletime.providers;
 
 import com.echobox.github.cycletime.analyse.PRReviewState;
 
-import java.util.Date;
+import java.time.ZonedDateTime;
 
 /**
  * A test implementation of the PRReview interface
@@ -28,10 +28,10 @@ import java.util.Date;
 public class PRReviewTestImpl implements PRReview {
   
   private final PRReviewState state;
-  private final Date createdAt;
+  private final ZonedDateTime createdAt;
   private final User user;
   
-  public PRReviewTestImpl(PRReviewState state, Date createdAt, String userName) {
+  public PRReviewTestImpl(PRReviewState state, ZonedDateTime createdAt, String userName) {
     this.state = state;
     this.createdAt = createdAt;
     this.user = new UserTestImpl(userName);
@@ -43,7 +43,7 @@ public class PRReviewTestImpl implements PRReview {
   }
   
   @Override
-  public Date getReviewCreatedAt() {
+  public ZonedDateTime getReviewCreatedAt() {
     return createdAt;
   }
   
