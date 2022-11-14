@@ -19,7 +19,8 @@ package com.echobox.github.cycletime;
 
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
-import com.echobox.github.cycletime.persist.CSVPersist;
+import com.echobox.github.cycletime.data.AnalysedPR;
+import com.echobox.github.cycletime.data.CSVPersist;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,9 +32,10 @@ import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.Writer;
+import java.util.Comparator;
+import java.util.List;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 
 /**
  * Let's download some github information!
@@ -44,11 +46,20 @@ public class Main {
   private static final Logger LOGGER = LogManager.getLogger();
   
   private static final TimeZone persistWithTimezone = TimeZone.getTimeZone("UTC");
+  private static final String RAW_CSV_FILENAME = "export.csv";
+  private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
   
   public static void main(String[] args) throws Exception {
 
     LOGGER.info("Starting ...");
-    
+  
+    //performAnalyse();
+    performAggregate();
+  
+    LOGGER.info("... Done");
+  }
+  
+  private static void performAnalyse() throws Exception {
     //Requires GITHUB_OAUTH=... env variable setting with token
     GitHub github = GitHubBuilder.fromEnvironment().build();
     
@@ -59,21 +70,19 @@ public class Main {
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
     
-    Writer fw = new PrintWriter("export.csv");
-    CSVPersist csv = new CSVPersist(fw, persistWithTimezone);
-    csv.writeCSVHeader();
-    
-    // 1664582400 Start of October
-    // 1661990400 Start of Sept
-    long considerOnlyPRsMergedAfterUnixTime = 1664582400;
-    long considerOnlyPRsMergedBeforeUnixTime = 1667260800;
+    try (CSVPersist csv = new CSVPersist(RAW_CSV_FILENAME, persistWithTimezone, false)) {
+      csv.writeCSVHeader();
   
-    analyseEntireOrg(githubOrg, considerOnlyPRsMergedAfterUnixTime,
-        considerOnlyPRsMergedBeforeUnixTime, csv);
+      // 1664582400 Start of October
+      // 1661990400 Start of Sept
+      long considerOnlyPRsMergedAfterUnixTime = 1664582400;
+      long considerOnlyPRsMergedBeforeUnixTime = 1667260800;
   
-    //analyseSpecificPR(githubOrg, "ebx-linkedin-sdk", 218, fw);
+      analyseEntireOrg(githubOrg, considerOnlyPRsMergedAfterUnixTime,
+          considerOnlyPRsMergedBeforeUnixTime, csv);
   
-    fw.close();
+      //analyseSpecificPR(githubOrg, "ebx-linkedin-sdk", 218, fw);
+    }
     
     GHRateLimit rateLimitEnd = github.getRateLimit();
     int usedRateLimit =
@@ -99,7 +108,23 @@ public class Main {
     PRAnalyser analyser = new PRAnalyser(repo.getName(), new PullRequestKohsuke(pullRequest));
     analyser.analyse();
     
-    csv.writeToCSV(analyser);
+    csv.writeToCSV(analyser.getAnalysis());
   }
-  
+
+  private static void performAggregate() throws Exception {
+    try (CSVPersist csv = new CSVPersist(RAW_CSV_FILENAME, persistWithTimezone, true)) {
+      List<AnalysedPR> analysedPRs = csv.loadAllData();
+      
+      LOGGER.debug("Loaded " + analysedPRs.size() + " PRs");
+      
+      List<AnalysedPR> sorted = analysedPRs.stream()
+          .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
+          .collect(Collectors.toList());
+      
+      try (CSVPersist csvOut = new CSVPersist(SORTED_CSV_FILENAME, persistWithTimezone, false)) {
+        csvOut.writeCSVHeader();
+        csvOut.writeToCSV(sorted);
+      }
+    }
+  }
 }

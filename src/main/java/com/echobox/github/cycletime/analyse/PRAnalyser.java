@@ -17,6 +17,7 @@
 
 package com.echobox.github.cycletime.analyse;
 
+import com.echobox.github.cycletime.data.AnalysedPR;
 import com.echobox.github.cycletime.providers.Commit;
 import com.echobox.github.cycletime.providers.PRReview;
 import com.echobox.github.cycletime.providers.PullRequest;
@@ -107,6 +108,9 @@ public class PRAnalyser {
   
     Date firstCommitAtDate = getFirstCommitDate(commits).orElse(prCreatedAtDate);
   
+    //A lower limit of zero is to protect against things getting out of sync with forcepushes
+    //An upper limit is to protect against single anomoylous PRs throwing out further analysis.
+    
     codingTimeSecs = Math.max(0, Math.min(MAX_SECS_CYCLE_COMPONENT,
         (codingFinishTimeMillis - firstCommitAtDate.getTime()) / 1000L));
     
@@ -178,4 +182,16 @@ public class PRAnalyser {
     return deDuplicatedReviews;
   }
   
+  /**
+   * Get the analysis wrapped up in an AnalysedPR
+   * @return The analysed PR
+   */
+  public AnalysedPR getAnalysis() {
+    if (!isAnalysed) {
+      throw new IllegalStateException("PR has not been analysed yet.");
+    }
+    
+    return new AnalysedPR(repoName, mergedAtDate, prNum, prTitle, prAuthorStr, codingTimeSecs,
+        pickupTimeSecs, reviewTimeSecs, prReviewedByList);
+  }
 }

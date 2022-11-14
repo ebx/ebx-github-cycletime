@@ -17,7 +17,7 @@
 
 package com.echobox.github.cycletime.analyse;
 
-import com.echobox.github.cycletime.persist.CSVPersist;
+import com.echobox.github.cycletime.data.CSVPersist;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -124,7 +124,7 @@ public class RepoAnalyser {
         
         PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), new PullRequestKohsuke(pr));
         analyser.analyse();
-        csv.writeToCSV(analyser);
+        csv.writeToCSV(analyser.getAnalysis());
         
         processedPRs.add(pr.getNumber());
       }
