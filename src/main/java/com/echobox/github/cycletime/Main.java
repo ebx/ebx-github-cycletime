@@ -20,6 +20,7 @@ package com.echobox.github.cycletime;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.data.AnalysedPR;
+import com.echobox.github.cycletime.data.AuthorsToSquadsCSVDAO;
 import com.echobox.github.cycletime.data.CycleTimeBucket;
 import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
@@ -65,14 +66,15 @@ public class Main {
       "export_sorted_by_mergedate_filteredauthors.csv";
   private static final String PREFERRED_AUTHOR_NAMES_CSV = "preferred_author_names.csv";
   
-  private static final List<String> AUTHORS_TO_FILTER_OUT = Lists.newArrayList("^dependabot.*");
+  private static final List<String> AUTHORS_TO_EXCLUDE = Lists.newArrayList("^dependabot.*");
   
   public static void main(String[] args) throws Exception {
 
     LOGGER.info("Starting ...");
 
     //performAnalyse();
-    performAggregate();
+    cleanupAnalysis();
+    aggregateCycleTimes();
   
     LOGGER.info("... Done");
   }
@@ -131,7 +133,7 @@ public class Main {
     csv.writeToCSV(analyser.getAnalysis(), null);
   }
 
-  private static void performAggregate() throws Exception {
+  private static void cleanupAnalysis() throws Exception {
     
     Map<String, String> preferredAuthorNames;
     try (PreferredAuthorNamesCSVDAO names =
@@ -146,48 +148,56 @@ public class Main {
       LOGGER.debug("Loaded " + analysedPRs.size() + " PRs");
     }
 
-    List<AnalysedPR> sorted = analysedPRs.stream()
-        .filter(Main::testAuthorFilterList)
+    List<AnalysedPR> sortedPRs = analysedPRs.stream()
+        .filter(pr -> !matchAuthorExcludeList(pr))
         .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
         .collect(Collectors.toList());
     
     try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
         persistWithTimezone, false)) {
       csvOut.writeCSVHeader();
-      csvOut.writeToCSV(sorted, preferredAuthorNames);
+      csvOut.writeToCSV(sortedPRs, preferredAuthorNames);
     }
 
-    List<AnalysedPR> sortedFilteredAuthors = analysedPRs.stream()
-        .filter(pr -> !testAuthorFilterList(pr))
+    List<AnalysedPR> sortedPRsExcludedAuthors = analysedPRs.stream()
+        .filter(pr -> matchAuthorExcludeList(pr))
         .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
         .collect(Collectors.toList());
 
     try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME_FILTERED_AUTHORS,
         persistWithTimezone, false)) {
       csvOut.writeCSVHeader();
-      csvOut.writeToCSV(sortedFilteredAuthors, preferredAuthorNames);
+      csvOut.writeToCSV(sortedPRsExcludedAuthors, preferredAuthorNames);
     }
-  
-    aggregateCycleTimes(analysedPRs);
-  
+
     LOGGER.debug("Completed aggregation.");
   }
   
-  private static void aggregateCycleTimes(List<AnalysedPR> analysedPRs) throws IOException {
-    //Test out some cycle times
-    List<String> squads = Lists.newArrayList("Ewok", "Ace", "Dragon", "Indigo",
-        "Zeus");
+  private static void aggregateCycleTimes() throws Exception {
+  
+    List<AnalysedPR> prsToAggregate;
+    try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
+        persistWithTimezone, true)) {
+      prsToAggregate = csvOut.loadAllData();
+    }
     
-    ZonedDateTime firstDateTime = analysedPRs.stream().map(AnalysedPR::getMergedAtDate)
+    AuthorsToSquadsCSVDAO authorsToSquadDAO =
+        new AuthorsToSquadsCSVDAO("author_names_to_squads.csv");
+    Map<String, List<String>> authorsToSquad = authorsToSquadDAO.loadAllAuthorsToSquad();
+
+    List<String> distinctSquads = authorsToSquad.entrySet().stream()
+        .flatMap(r -> r.getValue().stream()).distinct().collect(Collectors.toList());
+    
+    ZonedDateTime firstDateTime = prsToAggregate.stream().map(AnalysedPR::getMergedAtDate)
             .min(ZonedDateTime::compareTo).get().withZoneSameInstant(persistWithTimezone);
-    ZonedDateTime lastDateTime = analysedPRs.stream().map(AnalysedPR::getMergedAtDate)
+    ZonedDateTime lastDateTime = prsToAggregate.stream().map(AnalysedPR::getMergedAtDate)
         .max(ZonedDateTime::compareTo).get().withZoneSameInstant(persistWithTimezone);
     
     ZonedDateTime startAtMidnight = firstDateTime.withHour(0).withMinute(0).withSecond(0);
     ZonedDateTime midnightAtEnd = lastDateTime.withHour(0).withMinute(0).withSecond(0).plusDays(1);
     
     Map<String, List<CycleTimeBucket>> resultMap = new HashMap<>();
-    for (String squad : squads) {
+    for (String squad : distinctSquads) {
       List<CycleTimeBucket> buckets = new ArrayList<>();
       ZonedDateTime currentDateTime = startAtMidnight;
       while (currentDateTime.isBefore(midnightAtEnd)) {
@@ -197,34 +207,25 @@ public class Main {
       }
       resultMap.put(squad, buckets);
     }
-    
-    //What about people on multiple squads??
-    Map<String, String> authorToSquad = new HashMap<>();
-    authorToSquad.put("David Ashton", "Ewok");
-    authorToSquad.put("Jack Ellis", "Ewok");
-    authorToSquad.put("Kenneth Wong", "Ewok");
-    authorToSquad.put("Luke Martin", "Ewok");
-    authorToSquad.put("Matt Stobbs", "Ewok");
-    authorToSquad.put("Jon Haddow", "Ewok");
-    authorToSquad.put("Daniel Martinez-Gatell", "Ewok");
-    authorToSquad.put("Guillermo Villalobos", "Ewok");
-    authorToSquad.put("Dougal Rea", "Ewok");
-    
-    for (AnalysedPR pr : analysedPRs) {
+
+    for (AnalysedPR pr : prsToAggregate) {
       //Find the right author and add values to the correct bucket
       ZonedDateTime mergedDateTime = pr.getMergedAtDate().withZoneSameInstant(persistWithTimezone);
       long daysDiff = ChronoUnit.DAYS.between(startAtMidnight, mergedDateTime);
-      String bucketId = authorToSquad.get(pr.getPrAuthorStr());
-      if (bucketId == null) {
+      
+      List<String> authorSquads = authorsToSquad.get(pr.getPrAuthorStr());
+      if (authorSquads == null) {
         continue;
       }
       
-      CycleTimeBucket bucket = resultMap.get(bucketId).get((int) daysDiff);
-      if (bucket.getStartDateTime().isBefore(pr.getMergedAtDate())
-          && bucket.getEndDateTime().isAfter(pr.getMergedAtDate())) {
-        bucket.addValues(pr.getCodingTimeSecs(), pr.getPickupTimeSecs(), pr.getReviewTimeSecs());
-      } else {
-        throw new IllegalStateException("Idiot check - Unexpected bucket selected.");
+      for (String squad : authorSquads) {
+        CycleTimeBucket bucket = resultMap.get(squad).get((int) daysDiff);
+        if (bucket.getStartDateTime().isBefore(pr.getMergedAtDate())
+            && bucket.getEndDateTime().isAfter(pr.getMergedAtDate())) {
+          bucket.addValues(pr.getCodingTimeSecs(), pr.getPickupTimeSecs(), pr.getReviewTimeSecs());
+        } else {
+          throw new IllegalStateException("Idiot check - Unexpected bucket selected.");
+        }
       }
     }
     
@@ -267,14 +268,16 @@ public class Main {
             codingTimeStr, pickupTimeStr, reviewTimeStr);
       }
     }
+    
+    //Don't forget about exporting anyone that is 'unassigned'.
   }
   
-  private static boolean testAuthorFilterList(AnalysedPR pr) {
-    for (String regex : AUTHORS_TO_FILTER_OUT) {
+  private static boolean matchAuthorExcludeList(AnalysedPR pr) {
+    for (String regex : AUTHORS_TO_EXCLUDE) {
       if (pr.getPrAuthorStr().matches(regex)) {
-        return false;
+        return true;
       }
     }
-    return true;
+    return false;
   }
 }
