@@ -20,10 +20,13 @@ package com.echobox.github.cycletime;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.data.AnalysedPR;
+import com.echobox.github.cycletime.data.CycleTimeBucket;
 import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import com.google.common.collect.Lists;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kohsuke.github.GHOrganization;
@@ -33,9 +36,15 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 import org.kohsuke.github.GitHubBuilder;
 
+import java.io.FileWriter;
 import java.io.IOException;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -157,6 +166,106 @@ public class Main {
         persistWithTimezone, false)) {
       csvOut.writeCSVHeader();
       csvOut.writeToCSV(sortedFilteredAuthors, preferredAuthorNames);
+    }
+  
+    aggregateCycleTimes(analysedPRs);
+  
+    LOGGER.debug("Completed aggregation.");
+  }
+  
+  private static void aggregateCycleTimes(List<AnalysedPR> analysedPRs) throws IOException {
+    //Test out some cycle times
+    List<String> squads = Lists.newArrayList("Ewok", "Ace", "Dragon", "Indigo",
+        "Zeus");
+    
+    ZonedDateTime firstDateTime = analysedPRs.stream().map(AnalysedPR::getMergedAtDate)
+            .min(ZonedDateTime::compareTo).get().withZoneSameInstant(persistWithTimezone);
+    ZonedDateTime lastDateTime = analysedPRs.stream().map(AnalysedPR::getMergedAtDate)
+        .max(ZonedDateTime::compareTo).get().withZoneSameInstant(persistWithTimezone);
+    
+    ZonedDateTime startAtMidnight = firstDateTime.withHour(0).withMinute(0).withSecond(0);
+    ZonedDateTime midnightAtEnd = lastDateTime.withHour(0).withMinute(0).withSecond(0).plusDays(1);
+    
+    Map<String, List<CycleTimeBucket>> resultMap = new HashMap<>();
+    for (String squad : squads) {
+      List<CycleTimeBucket> buckets = new ArrayList<>();
+      ZonedDateTime currentDateTime = startAtMidnight;
+      while (currentDateTime.isBefore(midnightAtEnd)) {
+        ZonedDateTime currentPlusOneDay = currentDateTime.plusDays(1);
+        buckets.add(new CycleTimeBucket(currentDateTime, currentPlusOneDay));
+        currentDateTime = currentPlusOneDay;
+      }
+      resultMap.put(squad, buckets);
+    }
+    
+    //What about people on multiple squads??
+    Map<String, String> authorToSquad = new HashMap<>();
+    authorToSquad.put("David Ashton", "Ewok");
+    authorToSquad.put("Jack Ellis", "Ewok");
+    authorToSquad.put("Kenneth Wong", "Ewok");
+    authorToSquad.put("Luke Martin", "Ewok");
+    authorToSquad.put("Matt Stobbs", "Ewok");
+    authorToSquad.put("Jon Haddow", "Ewok");
+    authorToSquad.put("Daniel Martinez-Gatell", "Ewok");
+    authorToSquad.put("Guillermo Villalobos", "Ewok");
+    authorToSquad.put("Dougal Rea", "Ewok");
+    
+    for (AnalysedPR pr : analysedPRs) {
+      //Find the right author and add values to the correct bucket
+      ZonedDateTime mergedDateTime = pr.getMergedAtDate().withZoneSameInstant(persistWithTimezone);
+      long daysDiff = ChronoUnit.DAYS.between(startAtMidnight, mergedDateTime);
+      String bucketId = authorToSquad.get(pr.getPrAuthorStr());
+      if (bucketId == null) {
+        continue;
+      }
+      
+      CycleTimeBucket bucket = resultMap.get(bucketId).get((int) daysDiff);
+      if (bucket.getStartDateTime().isBefore(pr.getMergedAtDate())
+          && bucket.getEndDateTime().isAfter(pr.getMergedAtDate())) {
+        bucket.addValues(pr.getCodingTimeSecs(), pr.getPickupTimeSecs(), pr.getReviewTimeSecs());
+      } else {
+        throw new IllegalStateException("Idiot check - Unexpected bucket selected.");
+      }
+    }
+    
+    //Setup headers
+    String isoFormat = "yyyy-MM-dd";
+    DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern(isoFormat);
+    List<String> headers = Lists.newArrayList("", "CodingTimeSecs", "PickupTimeSecs",
+        "ReviewTimeSecs");
+    
+    String hoursFormat = "%.2f";
+    FileWriter out = new FileWriter("ewok_cycle_times_hours.csv");
+    CSVFormat csvFormat =
+        CSVFormat.Builder.create().setHeader(headers.toArray(new String[0])).build();
+    try (CSVPrinter printer = new CSVPrinter(out, csvFormat)) {
+      String squad = "Ewok";
+      
+      List<CycleTimeBucket> buckets = resultMap.get(squad);
+  
+      for (CycleTimeBucket bucket : buckets) {
+        
+        String codingTimeStr = "";
+        if (!bucket.getCodingTimeSecsValues().isEmpty()) {
+          double totalInHours = bucket.getAverageCodingTimeSecs().getAsDouble() / 3600;
+          codingTimeStr =  String.format(hoursFormat, totalInHours);
+        }
+        
+        String pickupTimeStr = "";
+        if (!bucket.getPickupTimeSecsValues().isEmpty()) {
+          double totalInHours = bucket.getAveragePickupTimeSecs().getAsDouble() / 3600;
+          pickupTimeStr = String.format(hoursFormat, totalInHours);
+        }
+        
+        String reviewTimeStr = "";
+        if (!bucket.getReviewTimeSecsValues().isEmpty()) {
+          double totalInHours = bucket.getAverageReviewTimeSecs().getAsDouble() / 3600;
+          reviewTimeStr = String.format(hoursFormat, totalInHours);
+        }
+        
+        printer.printRecord(dateTimeFormatter.format(bucket.getStartDateTime()),
+            codingTimeStr, pickupTimeStr, reviewTimeStr);
+      }
     }
   }
   
