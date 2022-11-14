@@ -124,7 +124,7 @@ public class RepoAnalyser {
         
         PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), new PullRequestKohsuke(pr));
         analyser.analyse();
-        csv.writeToCSV(analyser.getAnalysis());
+        csv.writeToCSV(analyser.getAnalysis(), null);
         
         processedPRs.add(pr.getNumber());
       }

@@ -20,6 +20,7 @@ package com.echobox.github.cycletime;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.data.AnalysedPR;
+import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import com.google.common.collect.Lists;
@@ -35,6 +36,7 @@ import org.kohsuke.github.GitHubBuilder;
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
@@ -51,8 +53,9 @@ public class Main {
   private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
   private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
       "export_sorted_by_mergedate_filteredauthors.csv";
+  private static final String PREFERRED_AUTHOR_NAMES_CSV = "preferred_author_names.csv";
   
-  private static final List<String> AUTHORS_TO_FILTEROUT = Lists.newArrayList("^dependabot.*");
+  private static final List<String> AUTHORS_TO_FILTER_OUT = Lists.newArrayList("^dependabot.*");
   
   public static void main(String[] args) throws Exception {
 
@@ -115,43 +118,50 @@ public class Main {
     PRAnalyser analyser = new PRAnalyser(repo.getName(), new PullRequestKohsuke(pullRequest));
     analyser.analyse();
     
-    csv.writeToCSV(analyser.getAnalysis());
+    csv.writeToCSV(analyser.getAnalysis(), null);
   }
 
   private static void performAggregate() throws Exception {
+    
+    Map<String, String> preferredAuthorNames;
+    try (PreferredAuthorNamesCSVDAO names =
+        new PreferredAuthorNamesCSVDAO(PREFERRED_AUTHOR_NAMES_CSV)) {
+      preferredAuthorNames = names.loadAllPreferredNames();
+    }
+  
+    List<AnalysedPR> analysedPRs;
     try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
         true)) {
-      
-      List<AnalysedPR> analysedPRs = csv.loadAllData();
-      
+      analysedPRs = csv.loadAllData();
       LOGGER.debug("Loaded " + analysedPRs.size() + " PRs");
-      
-      List<AnalysedPR> sorted = analysedPRs.stream()
-          .filter(Main::testAuthorFilterList)
-          .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
-          .collect(Collectors.toList());
-      
-      try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
-          persistWithTimezone, false)) {
-        csvOut.writeCSVHeader();
-        csvOut.writeToCSV(sorted);
-      }
-  
-      List<AnalysedPR> sortedFilteredAuthors = analysedPRs.stream()
-          .filter(pr -> !testAuthorFilterList(pr))
-          .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
-          .collect(Collectors.toList());
-  
-      try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME_FILTERED_AUTHORS,
-          persistWithTimezone, false)) {
-        csvOut.writeCSVHeader();
-        csvOut.writeToCSV(sortedFilteredAuthors);
-      }
     }
+
+    List<AnalysedPR> sorted = analysedPRs.stream()
+        .filter(Main::testAuthorFilterList)
+        .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
+        .collect(Collectors.toList());
+    
+    try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
+        persistWithTimezone, false)) {
+      csvOut.writeCSVHeader();
+      csvOut.writeToCSV(sorted, preferredAuthorNames);
+    }
+
+    List<AnalysedPR> sortedFilteredAuthors = analysedPRs.stream()
+        .filter(pr -> !testAuthorFilterList(pr))
+        .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
+        .collect(Collectors.toList());
+
+    try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME_FILTERED_AUTHORS,
+        persistWithTimezone, false)) {
+      csvOut.writeCSVHeader();
+      csvOut.writeToCSV(sortedFilteredAuthors, preferredAuthorNames);
+    }
+    
   }
   
   private static boolean testAuthorFilterList(AnalysedPR pr) {
-    for (String regex : AUTHORS_TO_FILTEROUT) {
+    for (String regex : AUTHORS_TO_FILTER_OUT) {
       if (pr.getPrAuthorStr().matches(regex)) {
         return false;
       }

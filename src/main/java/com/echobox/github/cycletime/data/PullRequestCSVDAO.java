@@ -35,12 +35,14 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
- * Persist analysis to CSV files
+ * A CSV DAO for PR analysis results
  * @author MarcF
  */
 public class PullRequestCSVDAO implements AutoCloseable {
@@ -73,9 +75,10 @@ public class PullRequestCSVDAO implements AutoCloseable {
         + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
   }
   
-  public synchronized  void writeToCSV(List<AnalysedPR> analysedPRs) throws IOException {
+  public synchronized  void writeToCSV(List<AnalysedPR> analysedPRs,
+      Map<String, String> preferredAuthorNames) throws IOException {
     for (AnalysedPR analysedPR : analysedPRs) {
-      writeToCSV(analysedPR);
+      writeToCSV(analysedPR, preferredAuthorNames);
     }
   }
   
@@ -83,21 +86,31 @@ public class PullRequestCSVDAO implements AutoCloseable {
    * Write a CSV row to the provided writer for this analysed PR. Calls flush on the writer
    * to ensure an incomplete execution still provides output.
    * @param  analysedPR The analysed PR
+   * @param  preferredAuthorNames Preferred author names
    * @throws IOException If the write fails
    */
-  public synchronized void writeToCSV(AnalysedPR analysedPR) throws IOException {
+  public synchronized void writeToCSV(AnalysedPR analysedPR,
+      Map<String, String> preferredAuthorNames) throws IOException {
     
     String repoNum = analysedPR.getRepoName() + "/" + analysedPR.getPrNum();
     String safeCSVTitle = StringEscapeUtils.escapeCsv(analysedPR.getPrTitle());
-    String reviewUserNameStr = analysedPR.getPrReviewedByList()
-        .stream().collect(Collectors.joining(","));
+    String authorName = analysedPR.getPrAuthorStr();
   
+    Stream<String> reviewedByStream = analysedPR.getPrReviewedByList().stream();
+    
+    if (preferredAuthorNames != null) {
+      authorName = preferredAuthorNames.getOrDefault(authorName, authorName);
+      reviewedByStream = reviewedByStream.map(n -> preferredAuthorNames.getOrDefault(n, n));
+    }
+  
+    String reviewUserNameStr = reviewedByStream.collect(Collectors.joining(","));
+    
     csvWriter.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
         fullFormat.format(analysedPR.getMergedAtDate()),
         monthOnlyFormat.format(analysedPR.getMergedAtDate()),
         repoNum,
         safeCSVTitle,
-        analysedPR.getPrAuthorStr(),
+        authorName,
         analysedPR.getCodingTimeSecs(),
         analysedPR.getPickupTimeSecs(),
         analysedPR.getReviewTimeSecs(),
