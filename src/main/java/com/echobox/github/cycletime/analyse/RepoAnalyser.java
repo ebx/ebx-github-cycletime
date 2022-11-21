@@ -45,16 +45,16 @@ public class RepoAnalyser {
   private final GHRepository ghRepository;
   private final long considerOnlyPRsMergedAfterUnixTime;
   private final long considerOnlyPRsMergedBeforeUnixTime;
-  private final PullRequestCSVDAO csv;
+  private final PullRequestCSVDAO prPersistDAO;
   
   public RepoAnalyser(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime, long considerOnlyPRsMergedBeforeUnixTime,
-      PullRequestCSVDAO csv) {
+      PullRequestCSVDAO prPersistDAO) {
     
     this.ghRepository = ghRepository;
     this.considerOnlyPRsMergedAfterUnixTime = considerOnlyPRsMergedAfterUnixTime;
     this.considerOnlyPRsMergedBeforeUnixTime = considerOnlyPRsMergedBeforeUnixTime;
-    this.csv = csv;
+    this.prPersistDAO = prPersistDAO;
   }
   
   public void analyseRepo() {
@@ -64,7 +64,7 @@ public class RepoAnalyser {
     
     try {
       
-      Set<Integer> processedPRs = new HashSet<>();
+      Set<Integer> prsProcessedThisExecution = new HashSet<>();
       
       // We use Sort.UPDATED so that we include PRs that were created at ANY time before the min
       // merge time but likely merged within this time. If PRs get picked up that were merged
@@ -75,15 +75,15 @@ public class RepoAnalyser {
           ghRepository.queryPullRequests().state(GHIssueState.CLOSED)
               .sort(GHPullRequestQueryBuilder.Sort.UPDATED).direction(GHDirection.DESC).list()
               .iterator();
-  
-      processMergedPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
-          considerOnlyPRsMergedBeforeUnixTime, csv, processedPRs, prsByUpdatedIterator,
-          ghPullRequest -> {
+
+      processPRs(ghRepository, considerOnlyPRsMergedAfterUnixTime,
+          considerOnlyPRsMergedBeforeUnixTime, prsProcessedThisExecution, prsByUpdatedIterator,
+          pr -> {
             try {
-              return ghPullRequest.getUpdatedAt();
+              return pr.getUpdatedAt();
             } catch (IOException ioe) {
               throw new IllegalStateException(
-                  "Failed to get updated time of PR " + ghPullRequest.getNumber());
+                  "Failed to get updated time of PR " + pr.getNumber());
             }
           });
   
@@ -92,25 +92,30 @@ public class RepoAnalyser {
     }
   }
   
-  private void processMergedPRs(GHRepository ghRepository,
+  private void processPRs(GHRepository ghRepository,
       long considerOnlyPRsMergedAfterUnixTime,
-      long considerOnlyPRsMergedBeforeUnixTime, PullRequestCSVDAO csv, Set<Integer> processedPRs,
+      long considerOnlyPRsMergedBeforeUnixTime, Set<Integer> prsProcessedThisExecution,
       PagedIterator<GHPullRequest> prIterator, Function<GHPullRequest, Date> prActionTimeFunc)
       throws IOException {
     
     long minPRActionTimeBeforeStoppingProcessing = considerOnlyPRsMergedAfterUnixTime;
     
+    String repoName = ghRepository.getName();
+    
     while (prIterator.hasNext()) {
       
       GHPullRequest pr = prIterator.next();
-      
-      if (processedPRs.contains(pr.getNumber())) {
-        continue;
-      }
-      
+      int prNum = pr.getNumber();
+
       if (prActionTimeFunc.apply(pr).getTime() / 1000L < minPRActionTimeBeforeStoppingProcessing) {
         LOGGER.debug("Stopping as we are now before the min PR action time.");
         break;
+      }
+  
+      if (prsProcessedThisExecution.contains(prNum)) {
+        continue;
+      } else if (prPersistDAO.isPRAlreadyPersisted(repoName, prNum)) {
+        continue;
       }
       
       if (!pr.isMerged()) {
@@ -122,11 +127,11 @@ public class RepoAnalyser {
       if (prMergedAtUnixTime >= considerOnlyPRsMergedAfterUnixTime
           && prMergedAtUnixTime < considerOnlyPRsMergedBeforeUnixTime) {
         
-        PRAnalyser analyser = new PRAnalyser(ghRepository.getName(), new PullRequestKohsuke(pr));
+        PRAnalyser analyser = new PRAnalyser(repoName, new PullRequestKohsuke(pr));
         analyser.analyse();
-        csv.writeToCSV(analyser.getAnalysis(), null);
+        prPersistDAO.writeToCSV(analyser.getAnalysis(), null);
         
-        processedPRs.add(pr.getNumber());
+        prsProcessedThisExecution.add(pr.getNumber());
       }
     }
     

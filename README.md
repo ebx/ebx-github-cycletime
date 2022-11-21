@@ -14,25 +14,48 @@ ebx-github-cycletime itself is open source software released under the terms of 
 
 ## Getting Started
 
-At the time of writing this application is intended to be run from source (>=Java 14). Use the 
+At the time of writing the application is intended to be run from source (>=Java 14). Use the 
 following steps to get started:
 
 1. Download the source.
-2. Set an environment variable `GITHUB_OAUTH=[token]` where _[token]_ is a github token with 
-   read access to the required organisation. Please see [here](https://github-api.kohsuke.org/index.html) for alternative auth mechanisms.
-3. Open the Main.java source file needed for subsequent steps.   
-4. Set the desired _orgIdentifier_ in source.
-5. Set the desired _considerOnlyPRsMergedAfterUnixTime_ and 
-   _considerOnlyPRsMergedBeforeUnixTime_ parameters in source.
-6. Run the application.
+2. Set an environment variable `ORG_ID=[org]` where _[org]_ is the github organisation you want 
+   to analyse.   
+3. Set another environment variable `GITHUB_OAUTH=[token]` where _[token]_ is a github token with 
+   read access to the required organisation. Please see [here](https://github-api.kohsuke.org/index.html) 
+   for alternative auth mechanisms if needed.
+4. Run the application.
 
-This will export all PR data from the organisation as configured.
+This will export all recent PR data (see `DEFAULT_EXPORT_DAYS_IF_NO_APPEND`) from the organisation 
+into `RAW_CSV_FILENAME`. Subsequent steps will then clean this data by applying optional 
+'preferred author name' mappings (i.e. swap github exported names for those provided in 
+`preferred_author_names.csv`) and sort by the PR merge date. The cycle time aggregation uses 
+`AUTHOR_NAMES_TO_SQUADS_CSV` to map authors to squads. Authors can be in multiple squads.
 
-**Alternatively you can export just a single PR:**
+If the application is run again with the same configuration it will append new PRs to 
+`RAW_CSV_FILENAME` and update all downstream documents using all available data.
 
-7. Comment out the _analyseEntireOrg(..._ method and replace it with the _analyseSpecificPR(..._ 
-   method.
-8. Run the application again just for a single PR.   
+For example config files please see `preferred_author_names.example.csv` and 
+`author_names_to_squads.example.csv`. Just add your data as required and then remove the `.example` 
+part of the filename.
+
+**Alternatively you can modify Main.java to export just a single PR:**
+
+```
+GitHub github = GitHubBuilder.fromEnvironment().build();
+
+GHOrganization githubOrg = github.getOrganization(System.getenv("ORG_ID"));
+
+// Specify your own repo name here
+String repoName = "ebx-linkedin-sdk";
+GHRepository repo = githubOrg.getRepository(repoName);
+int PrNum = 218;
+GHPullRequest pullRequest = repo.getPullRequest(prNum);
+PRAnalyser analyser = new PRAnalyser(repoName, new PullRequestKohsuke(pullRequest));
+analyser.analyse();
+
+// Then define what you want to do with the analysis
+// ...
+```
 
 ### Helpful notes:
 

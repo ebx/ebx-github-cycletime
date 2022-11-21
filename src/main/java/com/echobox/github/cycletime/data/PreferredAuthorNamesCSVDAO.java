@@ -23,9 +23,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -38,10 +40,16 @@ public class PreferredAuthorNamesCSVDAO implements AutoCloseable {
   
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private final Reader csvReader;
+  private final Reader preferredAuthorNameFile;
   
   public PreferredAuthorNamesCSVDAO(String filename) throws IOException {
-    this.csvReader = new FileReader(filename);
+    
+    if (new File(filename).exists()) {
+      this.preferredAuthorNameFile = new FileReader(filename);
+    } else {
+      LOGGER.warn("Detected no PreferredAuthorNames file so assuming no preferred names.");
+      this.preferredAuthorNameFile = null;
+    }
   }
   
   /**
@@ -51,8 +59,12 @@ public class PreferredAuthorNamesCSVDAO implements AutoCloseable {
    */
   public synchronized Map<String, String> loadAllPreferredNames() throws IOException {
 
+    if (preferredAuthorNameFile == null) {
+      return new HashMap<>();
+    }
+    
     CSVFormat format = CSVFormat.Builder.create().setHeader().build();
-    Iterable<CSVRecord> records = format.parse(csvReader);
+    Iterable<CSVRecord> records = format.parse(preferredAuthorNameFile);
   
     return StreamSupport.stream(records.spliterator(), false)
         .filter(r -> !StringUtils.isEmpty(r.get(0)))
@@ -61,6 +73,8 @@ public class PreferredAuthorNamesCSVDAO implements AutoCloseable {
   
   @Override
   public void close() throws Exception {
-    csvReader.close();
+    if (preferredAuthorNameFile != null) {
+      preferredAuthorNameFile.close();
+    }
   }
 }

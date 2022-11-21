@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Calculates daily squad cycle times from PRs
@@ -93,7 +94,7 @@ public class SquadDailyCycleTimeCalculator {
       List<String> authorInSquads = authorsToSquad.get(author);
       numPRsBucketedByAuthor.computeIfAbsent(author, k -> new AtomicInteger(0));
       if (authorInSquads == null || authorInSquads.isEmpty()) {
-        continue;
+        authorInSquads = Lists.newArrayList("None");
       } else {
         numPRsBucketedByAuthor.get(author).incrementAndGet();
       }
@@ -116,8 +117,10 @@ public class SquadDailyCycleTimeCalculator {
   private void setupCycleTimeGroups(Map<String, List<String>> authorsToSquad,
       ZonedDateTime startAtMidnight, ZonedDateTime midnightAtEnd) {
     
-    List<String> distinctSquads = authorsToSquad.entrySet().stream()
-        .flatMap(r -> r.getValue().stream()).distinct().collect(Collectors.toList());
+    List<String> distinctSquads = Stream.concat(
+        authorsToSquad.entrySet().stream().flatMap(r -> r.getValue().stream()),
+        Stream.of("None"))
+        .distinct().collect(Collectors.toList());
     
     for (String squad : distinctSquads) {
       List<CycleTimeGroup> buckets = new ArrayList<>();
@@ -140,15 +143,15 @@ public class SquadDailyCycleTimeCalculator {
         .map(e -> e.getKey()).distinct().collect(Collectors.toList());
     
     for (String author : authorsNeverSeenInSquad) {
-      LOGGER.warn("Never detected following author in squad '" + author + "'. Any associated "
-          + "cycle time data has been ignored.");
+      LOGGER.warn("Never detected author '" + author + "' in squad, added them to squad"
+          + " 'NONE'.");
     }
   }
   
   public void persistToCSV() throws IOException {
 
-    List<String> headers = Lists.newArrayList("", "CodingTimeSecs", "PickupTimeSecs",
-        "ReviewTimeSecs");
+    List<String> headers = Lists.newArrayList("", "CodingTimeHours", "PickupTimeHours",
+        "ReviewTimeHours", "TotalTimeHours");
     CSVFormat csvFormat = CSVFormat.Builder.create()
         .setHeader(headers.toArray(new String[0])).build();
 
@@ -164,24 +167,35 @@ public class SquadDailyCycleTimeCalculator {
           String dateStr = DATE_TIME_FORMATTER.format(group.getStartDateTime());
           
           String codingTimeStr = "";
+          
+          double totalTimeHours = 0;
+          
           if (!group.getCodingTimeSecsValues().isEmpty()) {
-            double totalInHours = group.getAverageCodingTimeSecs().getAsDouble() / 3600;
-            codingTimeStr =  String.format(PERSIST_HOURS_FORMAT, totalInHours);
+            double averageInHours = group.getAverageCodingTimeSecs().getAsDouble() / 3600;
+            totalTimeHours += averageInHours;
+            codingTimeStr =  String.format(PERSIST_HOURS_FORMAT, averageInHours);
           }
         
           String pickupTimeStr = "";
           if (!group.getPickupTimeSecsValues().isEmpty()) {
-            double totalInHours = group.getAveragePickupTimeSecs().getAsDouble() / 3600;
-            pickupTimeStr = String.format(PERSIST_HOURS_FORMAT, totalInHours);
+            double averageInHours = group.getAveragePickupTimeSecs().getAsDouble() / 3600;
+            totalTimeHours += averageInHours;
+            pickupTimeStr = String.format(PERSIST_HOURS_FORMAT, averageInHours);
           }
         
           String reviewTimeStr = "";
           if (!group.getReviewTimeSecsValues().isEmpty()) {
-            double totalInHours = group.getAverageReviewTimeSecs().getAsDouble() / 3600;
-            reviewTimeStr = String.format(PERSIST_HOURS_FORMAT, totalInHours);
+            double averageInHours = group.getAverageReviewTimeSecs().getAsDouble() / 3600;
+            totalTimeHours += averageInHours;
+            reviewTimeStr = String.format(PERSIST_HOURS_FORMAT, averageInHours);
           }
         
-          printer.printRecord(dateStr, codingTimeStr, pickupTimeStr, reviewTimeStr);
+          String totalTimeStr = "";
+          if (totalTimeHours > 0) {
+            totalTimeStr = String.format(PERSIST_HOURS_FORMAT, totalTimeHours);
+          }
+          
+          printer.printRecord(dateStr, codingTimeStr, pickupTimeStr, reviewTimeStr, totalTimeStr);
         }
       }
     }

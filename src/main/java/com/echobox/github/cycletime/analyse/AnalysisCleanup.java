@@ -20,7 +20,6 @@ package com.echobox.github.cycletime.analyse;
 import com.echobox.github.cycletime.data.AnalysedPR;
 import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
-import com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,17 +35,13 @@ import java.util.stream.Collectors;
  */
 public class AnalysisCleanup {
   
-  /**
-   * A regex list of authors that should be excluded from the primary output
-   */
-  public static List<String> AUTHORS_TO_EXCLUDE = Lists.newArrayList("^dependabot.*");
-  
   private static final Logger LOGGER = LogManager.getLogger();
   
   private final List<AnalysedPR> uncleanedPRs;
   private final PreferredAuthorNamesCSVDAO preferredAuthorsNamesDAO;
   private final PullRequestCSVDAO cleanedDAOOut;
   private final PullRequestCSVDAO cleanedDAOExcludedAuthorOut;
+  private final List<String> authorsToFilterOut;
   
   /**
    * Create a cleanup instance
@@ -54,29 +49,32 @@ public class AnalysisCleanup {
    * @param preferredAuthorsNamesDAO A DAO for loading preferred author name mappings
    * @param cleanedDAOOut A DAO for the cleaned PRs
    * @param cleanedDAOExcludedAuthorOut A DAO for the cleaned PRs that contains any excluded
+   * @param authorsToFilterOut Authors to filter into a dedicated output CSV
    * authors.
    */
   public AnalysisCleanup(List<AnalysedPR> uncleanedPRs,
       PreferredAuthorNamesCSVDAO preferredAuthorsNamesDAO,
-      PullRequestCSVDAO cleanedDAOOut, PullRequestCSVDAO cleanedDAOExcludedAuthorOut) {
+      PullRequestCSVDAO cleanedDAOOut, PullRequestCSVDAO cleanedDAOExcludedAuthorOut,
+      List<String> authorsToFilterOut) {
     this.uncleanedPRs = uncleanedPRs;
     this.preferredAuthorsNamesDAO = preferredAuthorsNamesDAO;
     this.cleanedDAOOut = cleanedDAOOut;
     this.cleanedDAOExcludedAuthorOut = cleanedDAOExcludedAuthorOut;
+    this.authorsToFilterOut = authorsToFilterOut;
   }
 
   public void clean() throws IOException {
     Map<String, String> preferredAuthorNames = preferredAuthorsNamesDAO.loadAllPreferredNames();
   
     List<AnalysedPR> sortedPRs = uncleanedPRs.stream()
-        .filter(pr -> !matchAuthorExcludeList(pr))
+        .filter(pr -> !matchAuthorFilterList(pr))
         .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
         .collect(Collectors.toList());
   
     cleanedDAOOut.writeToCSV(sortedPRs, preferredAuthorNames);
   
     List<AnalysedPR> sortedPRsExcludedAuthors = uncleanedPRs.stream()
-        .filter(pr -> matchAuthorExcludeList(pr))
+        .filter(pr -> matchAuthorFilterList(pr))
         .sorted(Comparator.comparing(pr -> pr.getMergedAtDate()))
         .collect(Collectors.toList());
   
@@ -85,8 +83,8 @@ public class AnalysisCleanup {
     LOGGER.debug("Completed analysis cleanup.");
   }
 
-  private static boolean matchAuthorExcludeList(AnalysedPR pr) {
-    for (String regex : AUTHORS_TO_EXCLUDE) {
+  private boolean matchAuthorFilterList(AnalysedPR pr) {
+    for (String regex : authorsToFilterOut) {
       if (pr.getPrAuthorStr().matches(regex)) {
         return true;
       }

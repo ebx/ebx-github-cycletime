@@ -56,6 +56,8 @@ public class PullRequestCSVDAO implements AutoCloseable {
   private final Reader csvReader;
   private final ZoneId persistWithTimezone;
   
+  private List<AnalysedPR> analysedPRs;
+  
   public PullRequestCSVDAO(String filename, ZoneId persistWithTimezone, boolean append)
       throws IOException {
     
@@ -74,7 +76,7 @@ public class PullRequestCSVDAO implements AutoCloseable {
         + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
   }
   
-  public synchronized  void writeToCSV(List<AnalysedPR> analysedPRs,
+  public synchronized void writeToCSV(List<AnalysedPR> analysedPRs,
       Map<String, String> preferredAuthorNames) throws IOException {
     for (AnalysedPR analysedPR : analysedPRs) {
       writeToCSV(analysedPR, preferredAuthorNames);
@@ -118,16 +120,41 @@ public class PullRequestCSVDAO implements AutoCloseable {
         reviewUserNameStr));
   
     csvWriter.flush();
+    if (analysedPRs != null) {
+      analysedPRs.add(analysedPR);
+    }
+  }
+
+  public synchronized boolean isPRAlreadyPersisted(String repoName, int prNum) throws IOException {
+    if (analysedPRs == null) {
+      loadAllData();
+    }
+    
+    return analysedPRs.stream()
+        .filter(pr -> pr.getRepoName().equals(repoName) && pr.getPrNum() == prNum)
+        .findFirst().isPresent();
   }
   
+  /**
+   * Loads all data from the CSV. Subsequent changes to data are not recognised as loaded
+   * data will be cached.
+   * @return The PRs loaded from the CSV file
+   * @throws IOException If there is a problem reading from the CSV file
+   */
   public synchronized List<AnalysedPR> loadAllData() throws IOException {
 
+    if (analysedPRs != null) {
+      return analysedPRs;
+    }
+    
     CSVFormat format = CSVFormat.Builder.create().setHeader().build();
     Iterable<CSVRecord> records = format.parse(csvReader);
   
-    return StreamSupport.stream(records.spliterator(), false)
+    analysedPRs =  StreamSupport.stream(records.spliterator(), false)
         .map(r -> parseRecord(r))
         .collect(Collectors.toList());
+    
+    return analysedPRs;
   }
   
   private AnalysedPR parseRecord(CSVRecord record) {

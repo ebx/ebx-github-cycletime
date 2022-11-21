@@ -23,4 +23,8 @@
 hs_err_pid*
 .idea/
 target/
-export.csv
+
+export*.csv
+*cycle_times_hours.csv
+author_names_to_squads.csv
+preferred_author_names.csv

@@ -23,6 +23,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
@@ -40,10 +41,15 @@ public class AuthorsToSquadsCSVDAO implements AutoCloseable {
   
   private static final Logger LOGGER = LogManager.getLogger();
 
-  private final Reader csvReader;
+  private final Reader authorToSquadFile;
   
   public AuthorsToSquadsCSVDAO(String filename) throws IOException {
-    this.csvReader = new FileReader(filename);
+    if (new File(filename).exists()) {
+      this.authorToSquadFile = new FileReader(filename);
+    } else {
+      LOGGER.warn("Detected no AuthorsToSquads file so assuming no squads.");
+      this.authorToSquadFile = null;
+    }
   }
   
   /**
@@ -53,8 +59,12 @@ public class AuthorsToSquadsCSVDAO implements AutoCloseable {
    */
   public synchronized Map<String, List<String>> loadAllAuthorsToSquad() throws IOException {
 
+    if (authorToSquadFile == null) {
+      return new HashMap<>();
+    }
+    
     CSVFormat format = CSVFormat.Builder.create().setHeader().build();
-    Iterable<CSVRecord> records = format.parse(csvReader);
+    Iterable<CSVRecord> records = format.parse(authorToSquadFile);
   
     Map<String, List<String>> authorsToSquads = new HashMap<>();
   
@@ -66,6 +76,8 @@ public class AuthorsToSquadsCSVDAO implements AutoCloseable {
   
   @Override
   public void close() throws Exception {
-    csvReader.close();
+    if (authorToSquadFile != null) {
+      authorToSquadFile.close();
+    }
   }
 }
