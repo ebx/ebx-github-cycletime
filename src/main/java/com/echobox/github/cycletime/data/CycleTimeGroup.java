@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.OptionalDouble;
 
 @Getter
-public class CycleTimeBucket {
+public class CycleTimeGroup {
   
   private final ZonedDateTime startDateTime;
   private final ZonedDateTime endDateTime;
@@ -39,7 +39,7 @@ public class CycleTimeBucket {
   @Getter
   private final List<Long> reviewTimeSecsValues = new ArrayList<>();
   
-  public CycleTimeBucket(ZonedDateTime startDateTime, ZonedDateTime endDateTime) {
+  public CycleTimeGroup(ZonedDateTime startDateTime, ZonedDateTime endDateTime) {
     this.startDateTime = startDateTime;
     this.endDateTime = endDateTime;
   }
