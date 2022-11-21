@@ -28,15 +28,15 @@ following steps to get started:
 This will export all recent PR data (see `DEFAULT_EXPORT_DAYS_IF_NO_APPEND`) from the organisation 
 into `RAW_CSV_FILENAME`. Subsequent steps will then clean this data by applying optional 
 'preferred author name' mappings (i.e. swap github exported names for those provided in 
-`preferred_author_names.csv`) and sort by the PR merge date. The cycle time aggregation uses 
+`PREFERRED_AUTHOR_NAMES_CSV`) and sort by the PR merge date. The cycle time aggregation uses 
 `AUTHOR_NAMES_TO_SQUADS_CSV` to map authors to squads. Authors can be in multiple squads.
 
 If the application is run again with the same configuration it will append new PRs to 
 `RAW_CSV_FILENAME` and update all downstream documents using all available data.
 
 For example config files please see `preferred_author_names.example.csv` and 
-`author_names_to_squads.example.csv`. Just add your data as required and then remove the `.example` 
-part of the filename.
+`author_names_to_squads.example.csv`. Just add your values as required and remove the 
+`.example` part of the filename.
 
 **Alternatively you can modify Main.java to export just a single PR:**
 
