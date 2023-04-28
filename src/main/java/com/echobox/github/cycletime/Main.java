@@ -17,6 +17,14 @@
 
 package com.echobox.github.cycletime;
 
+import com.chavaillaz.jira.client.IssueClient;
+import com.chavaillaz.jira.client.JiraClient;
+import com.chavaillaz.jira.client.apache.ApacheHttpJiraClient;
+import com.chavaillaz.jira.domain.BasicIssue;
+import com.chavaillaz.jira.domain.CommonFields;
+import com.chavaillaz.jira.domain.Fields;
+import com.chavaillaz.jira.domain.Issue;
+import com.chavaillaz.jira.domain.IssueType;
 import com.echobox.github.cycletime.analyse.AnalysisCleanup;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
@@ -44,8 +52,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Let's download some github information!
@@ -87,16 +98,18 @@ public class Main {
 
     //Requires GITHUB_OAUTH=... env variable setting with token
     GitHub github = GitHubBuilder.fromEnvironment().build();
-    
+
     GHOrganization githubOrg = github.getOrganization(orgIdentifier);
-  
+
     GHRateLimit rateLimitStart = github.getRateLimit();
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
+
+//    performAnalysis(githubOrg);
+//    cleanupAnalysis();
+//    aggregateCycleTimes();
     
-    performAnalysis(githubOrg);
-    cleanupAnalysis();
-    aggregateCycleTimes();
+    enrichWithJIRAData();
   
     GHRateLimit rateLimitEnd = github.getRateLimit();
     int usedRateLimit =
@@ -180,6 +193,55 @@ public class Main {
   
       calc.calculate();
       calc.persistToCSV();
+    }
+  }
+  
+  
+  private static void enrichWithJIRAData() throws Exception {
+    try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
+        persistWithTimezone, true)) {
+  
+      List<AnalysedPR> allPRs = csvOut.loadAllData();
+      
+      AnalysedPR pr = allPRs.get(0);
+      
+      String ticketNumber = pr.getPrTitle().split(" ")[0];
+      
+      String jiraURL = System.getenv("JIRA_URL");
+      String jiraEmail = System.getenv("JIRA_EMAIL");
+      String jiraAPIToken = System.getenv("JIRA_API_TOKEN");
+      
+      JiraClient<Issue> client = ApacheHttpJiraClient.jiraApacheClient(jiraURL)
+          .withAuthentication(jiraEmail, jiraAPIToken);
+
+      IssueClient<Issue> issueClient = client.getIssueClient();
+      
+      CompletableFuture<Issue> issue = issueClient.getIssue(ticketNumber);
+      Issue issue1 = issue.get();
+      Fields fields = issue1.getFields();
+      
+      BasicIssue parent = fields.getParent();
+      
+      CommonFields fields1 = parent.getFields();
+      IssueType issueType = fields1.getIssueType();
+      
+      CompletableFuture<Issue> issue2 = issueClient.getIssue(parent.getKey());
+      Issue issue3 = issue2.get();
+      Fields fields2 = issue3.getFields();
+      
+      BasicIssue parent1 = fields2.getParent();
+      CommonFields fields3 = parent1.getFields();
+      IssueType issueType1 = fields3.getIssueType();
+      
+      CompletableFuture<Issue> issue4 = issueClient.getIssue(parent1.getKey());
+      Issue issue5 = issue4.get();
+      Map<String, Object> customFields = issue5.getFields().getCustomFields();
+      
+      //customfield_12732
+      LinkedHashMap customfield12732 = (LinkedHashMap) customFields.get("customfield_12732");
+      String workType = (String) customfield12732.get("value");
+      
+      LOGGER.debug("Found epic of issue " + ticketNumber);
     }
   }
 
