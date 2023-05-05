@@ -15,40 +15,29 @@
  * limitations under the License.
  */
 
-package com.echobox.github.cycletime.data;
+package com.echobox.github.cycletime.enrichment;
 
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
+import com.echobox.github.cycletime.data.AnalysedPR;
 
-import java.time.ZonedDateTime;
 import java.util.List;
 
-@Getter
-@Setter
-@RequiredArgsConstructor
-public class AnalysedPR {
+/**
+ * Provides enrichment for an AnalysedPR. For example data from JIRA.
+ * @author MarcF
+ */
+public interface PREnricher {
   
-  @NonNull
-  private String repoName;
-  @NonNull
-  private ZonedDateTime mergedAtDate;
-  @NonNull
-  private int prNum;
-  @NonNull
-  private String prTitle;
-  @NonNull
-  private String prAuthorStr;
-  @NonNull
-  private long codingTimeSecs;
-  @NonNull
-  private long pickupTimeSecs;
-  @NonNull
-  private long reviewTimeSecs;
-  @NonNull
-  private List<String> prReviewedByList;
+  /**
+   * Provide the enrichment headers names provided by this implementation
+   * @return The enrichment header names
+   */
+  List<String> getEnrichmentHeaderNames();
   
-  private List<String> additionalEnrichments;
+  /**
+   * Given an analysed PR provide the expected enrichments
+   * @param analysedPR The PR for which to provide the enrichments
+   * @return The enrichments, which should equal in count the enrichment headers
+   */
+  List<String> getEnrichments(AnalysedPR analysedPR) throws Exception;
 
 }

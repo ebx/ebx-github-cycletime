@@ -14,7 +14,7 @@ ebx-github-cycletime itself is open source software released under the terms of 
 
 ## Getting Started
 
-At the time of writing the application is intended to be run from source (>=Java 14). Use the 
+At the time of writing the application is intended to be run from source (>=Java 17). Use the 
 following steps to get started:
 
 1. Download the source.
