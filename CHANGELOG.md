@@ -4,6 +4,6 @@
 
 * Initial release
 
-## 2.0.0 (May 5, 2023)
+## 1.1.0 (May 5, 2023)
 
-* Breaking changes to the analyser classes to allow for additional PR enrichers.
+* Added optional analyser classes to allow for additional PR enrichment. For example with JIRA data.

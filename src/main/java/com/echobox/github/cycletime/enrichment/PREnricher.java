@@ -34,10 +34,9 @@ public interface PREnricher {
   List<String> getEnrichmentHeaderNames();
   
   /**
-   * Given an analysed PR provide the expected enrichments
-   * @param analysedPR The PR for which to provide the enrichments
-   * @return The enrichments, which should equal in count the enrichment headers
+   * Given an analysed PR add the expected enrichments
+   * @param analysedPR The PR for which to add the enrichments
    */
-  List<String> getEnrichments(AnalysedPR analysedPR) throws Exception;
+  void addEnrichmentsToPR(AnalysedPR analysedPR) throws Exception;
 
 }

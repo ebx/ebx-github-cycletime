@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Getter
@@ -51,4 +52,12 @@ public class AnalysedPR {
   
   private List<String> additionalEnrichments;
 
+  public synchronized void appendEnrichments(List<String> enrichments) {
+    if (additionalEnrichments == null) {
+      additionalEnrichments = new ArrayList<>();
+    }
+    
+    additionalEnrichments.addAll(enrichments);
+  }
+  
 }

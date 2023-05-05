@@ -47,6 +47,7 @@ import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Let's download some github information!
@@ -66,7 +67,7 @@ public class Main {
   private static final String RAW_CSV_FILENAME = "export.csv";
   private static final boolean APPEND_EXISTING_EXPORT_FILE = true;
   private static final int DEFAULT_EXPORT_DAYS_IF_NO_APPEND = 7;
-  
+
   private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
   private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
       "export_sorted_by_mergedate_filteredauthors.csv";
@@ -94,12 +95,12 @@ public class Main {
     GHRateLimit rateLimitStart = github.getRateLimit();
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
-
-//    performAnalysis(githubOrg);
+    
+//    performExportAndAnalysis(githubOrg);
 //    cleanupAnalysis();
 //    aggregateCycleTimes();
     
-    enrichWithJIRAData();
+    buildEpicTypesFromIssueKeys();
   
     GHRateLimit rateLimitEnd = github.getRateLimit();
     int usedRateLimit =
@@ -108,7 +109,8 @@ public class Main {
     LOGGER.debug("Done. Used the following rate limit quota - " + usedRateLimit);
   }
   
-  private static void performAnalysis(GHOrganization githubOrg) throws Exception {
+  private static void performExportAndAnalysis(GHOrganization githubOrg)
+      throws Exception {
 
     boolean exportAlreadyExists = new File(RAW_CSV_FILENAME).exists();
     boolean append = exportAlreadyExists && APPEND_EXISTING_EXPORT_FILE;
@@ -137,7 +139,7 @@ public class Main {
       } else {
         prPersistDAO.writeCSVHeader();
       }
-  
+
       OrgAnalyser orgAnalyser = new OrgAnalyser(githubOrg, considerPRsMergedAfterUnixTime,
           considerPRsMergedBeforeUnixTime, prPersistDAO);
       orgAnalyser.analyseOrg();
@@ -185,26 +187,6 @@ public class Main {
       calc.persistToCSV();
     }
   }
-  
-  
-  private static void enrichWithJIRAData() throws Exception {
-    try (PullRequestCSVDAO csvOut = new PullRequestCSVDAO(SORTED_CSV_FILENAME,
-        persistWithTimezone, true)) {
-  
-      List<AnalysedPR> allPRs = csvOut.loadAllData();
-      
-      AnalysedPR pr = allPRs.get(0);
-      
-      String jiraURL = System.getenv("JIRA_URL");
-      String jiraEmail = System.getenv("JIRA_EMAIL");
-      String jiraAPIToken = System.getenv("JIRA_API_TOKEN");
-      
-      JIRAEpicWorkTypeEnricher enricher = new JIRAEpicWorkTypeEnricher(jiraURL, jiraEmail,
-          jiraAPIToken);
-      
-      List<String> enrichments = enricher.getEnrichments(pr);
-    }
-  }
 
   private static void analyseSpecificPR(GHOrganization githubOrg, String repoName,
       int prNum) throws IOException {
@@ -214,4 +196,29 @@ public class Main {
     PRAnalyser analyser = new PRAnalyser(repo.getName(), new PullRequestKohsuke(pullRequest));
     analyser.analyse();
   }
+
+  private static void buildEpicTypesFromIssueKeys() throws Exception  {
+    
+    String jiraURL = System.getenv("JIRA_URL");
+    String jiraLoginEmail = System.getenv("JIRA_EMAIL");
+    String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
+    
+    JIRAEpicWorkTypeEnricher enricher =
+        new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
+    
+    List<String> distinctIssueKeys;
+    try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
+        true)) {
+      List<AnalysedPR> uncleanedPRs = csv.loadAllData();
+      distinctIssueKeys = uncleanedPRs.stream()
+          .map(pr -> pr.getPrTitle())
+          .map(JIRAEpicWorkTypeEnricher::getIssueKeyFromPRTitle)
+          .filter(Optional::isPresent).map(Optional::get)
+          .distinct().collect(Collectors.toList());
+      LOGGER.debug("Loaded " + uncleanedPRs.size() + " PRs");
+    }
+    
+    //Lookup the epic types for each issue key and then save those out
+  }
+  
 }

@@ -19,15 +19,18 @@ package com.echobox.github.cycletime.enrichment.jira;
 
 import com.chavaillaz.jira.client.IssueClient;
 import com.chavaillaz.jira.client.JiraClient;
-import com.chavaillaz.jira.client.apache.ApacheHttpJiraClient;
+import com.chavaillaz.jira.client.java.JavaHttpJiraClient;
 import com.chavaillaz.jira.domain.Issue;
 import com.echobox.github.cycletime.data.AnalysedPR;
 import com.echobox.github.cycletime.enrichment.PREnricher;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
 
@@ -37,6 +40,8 @@ import java.util.regex.Pattern;
  * @author MarcF
  */
 public class JIRAEpicWorkTypeEnricher implements PREnricher {
+  
+  private static final Logger LOGGER = LogManager.getLogger();
   
   /**
    * The expected issue type name for an epic
@@ -53,7 +58,7 @@ public class JIRAEpicWorkTypeEnricher implements PREnricher {
   private IssueClient<Issue> issueClient;
   
   public JIRAEpicWorkTypeEnricher(String jiraURL, String jiraLoginEmail, String jiraLoginAPIToken) {
-    client = ApacheHttpJiraClient.jiraApacheClient(jiraURL)
+    client = JavaHttpJiraClient.jiraJavaClient(jiraURL)
         .withAuthentication(jiraLoginEmail, jiraLoginAPIToken);
     issueClient = client.getIssueClient();
   }
@@ -64,24 +69,46 @@ public class JIRAEpicWorkTypeEnricher implements PREnricher {
   }
   
   @Override
-  public List<String> getEnrichments(AnalysedPR analysedPR)
+  public void addEnrichmentsToPR(AnalysedPR analysedPR)
       throws ExecutionException, InterruptedException {
-
-    String issueKeyFromPRTitle = analysedPR.getPrTitle().split(" ")[0];
-    if (!EXPECTED_ISSUE_KEY_PATTERN.matcher(issueKeyFromPRTitle).matches()) {
+    
+    Optional<String> issueKeyFromPRTitle = getIssueKeyFromPRTitle(analysedPR.getPrTitle());
+    if (issueKeyFromPRTitle.isEmpty()) {
       throw new IllegalArgumentException("The PR title did not contain an issue key in the expected"
           + " format.");
     }
-
-    Issue currentIssue = issueClient.getIssue(issueKeyFromPRTitle).get();
-
+    
+    String workType = getEpicWorkTypeForIssueKey(issueKeyFromPRTitle.get());
+    
+    analysedPR.appendEnrichments(Arrays.asList(workType));
+  }
+  
+  /**
+   * Determine the epic work type of the provided JIRA issue key. Issue parent links will be
+   * followed until we arrive at the associated epic.
+   * @param issueKey
+   * @return The work type of the parent issue epic.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
+  public String getEpicWorkTypeForIssueKey(String issueKey)
+      throws ExecutionException, InterruptedException {
+    
+    Issue currentIssue = issueClient.getIssue(issueKey).get();
+    
     while (!getIssueTypeName(currentIssue).equals(EPIC_ISSUE_TYPE_NAME)) {
       currentIssue = issueClient.getIssue(getIssueParentKey(currentIssue)).get();
     }
     
-    String workType = getWorkTypeFieldFromEpicIssue(currentIssue);
-    
-    return Arrays.asList(workType);
+    return getWorkTypeFieldFromEpicIssue(currentIssue);
+  }
+  
+  public static Optional<String> getIssueKeyFromPRTitle(String prTitle) {
+    String issueKeyFromPRTitle = prTitle.split(" ")[0];
+    if (!EXPECTED_ISSUE_KEY_PATTERN.matcher(issueKeyFromPRTitle).matches()) {
+      return Optional.empty();
+    }
+    return Optional.of(issueKeyFromPRTitle);
   }
   
   private static String getIssueParentKey(Issue issue) {
