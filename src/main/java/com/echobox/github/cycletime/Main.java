@@ -23,6 +23,8 @@ import com.echobox.github.cycletime.analyse.PRAnalyser;
 import com.echobox.github.cycletime.analyse.SquadDailyCycleTimeCalculator;
 import com.echobox.github.cycletime.data.AnalysedPR;
 import com.echobox.github.cycletime.data.AuthorsToSquadsCSVDAO;
+import com.echobox.github.cycletime.data.ChildIssueKeyToEpicCSVDAO;
+import com.echobox.github.cycletime.data.Epic;
 import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.enrichment.jira.JIRAEpicWorkTypeEnricher;
@@ -46,6 +48,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -63,7 +66,7 @@ public class Main {
    * A regex list of authors that should be excluded from the primary output
    */
   public static List<String> AUTHORS_TO_FILTEROUT = Lists.newArrayList("^dependabot.*");
-  
+
   private static final String RAW_CSV_FILENAME = "export.csv";
   private static final boolean APPEND_EXISTING_EXPORT_FILE = true;
   private static final int DEFAULT_EXPORT_DAYS_IF_NO_APPEND = 7;
@@ -71,6 +74,8 @@ public class Main {
   private static final String SORTED_CSV_FILENAME = "export_sorted_by_mergedate.csv";
   private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
       "export_sorted_by_mergedate_filteredauthors.csv";
+  
+  private static final String ISSUES_TO_EPIC_CSV_FILENAME = "childissues_to_epic.csv";
   
   private static final String PREFERRED_AUTHOR_NAMES_CSV = "preferred_author_names.csv";
   private static final String AUTHOR_NAMES_TO_SQUADS_CSV = "author_names_to_squads.csv";
@@ -199,13 +204,6 @@ public class Main {
 
   private static void buildEpicTypesFromIssueKeys() throws Exception  {
     
-    String jiraURL = System.getenv("JIRA_URL");
-    String jiraLoginEmail = System.getenv("JIRA_EMAIL");
-    String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
-    
-    JIRAEpicWorkTypeEnricher enricher =
-        new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
-    
     List<String> distinctIssueKeys;
     try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
         true)) {
@@ -217,8 +215,50 @@ public class Main {
           .distinct().collect(Collectors.toList());
       LOGGER.debug("Loaded " + uncleanedPRs.size() + " PRs");
     }
+
+    String jiraURL = System.getenv("JIRA_URL");
+    String jiraLoginEmail = System.getenv("JIRA_EMAIL");
+    String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
     
-    //Lookup the epic types for each issue key and then save those out
+    JIRAEpicWorkTypeEnricher enricher =
+        new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
+    
+    //Get issue keys for
+    //  HELP Tickets
+    //  Planed tickets for known projects
+    //  R&D tickets
+    
+    //Load previously converted issue keys to epics.
+    //Determine what's new, get the epic types for those
+    //Save out the updated data
+    
+    Map<String, Epic> knownIssueToEpicMap;
+    try (ChildIssueKeyToEpicCSVDAO csv =
+        new ChildIssueKeyToEpicCSVDAO(ISSUES_TO_EPIC_CSV_FILENAME, true)) {
+      knownIssueToEpicMap = csv.loadAllEpics();
+    }
+    
+    //Remove known keys
+    distinctIssueKeys.removeAll(knownIssueToEpicMap.keySet());
+    
+    //Get the new epics
+    List<Epic> newEpics = distinctIssueKeys.stream().parallel().map(childIssueKey -> {
+      try {
+        Epic epic = enricher.getEpicFromChildIssueKey(childIssueKey);
+        LOGGER.debug("Retrieved epic for child key " + childIssueKey);
+        return epic;
+      } catch (Exception ex) {
+        LOGGER.error("** Failed to determine epic for child key " + childIssueKey, ex);
+        return null;
+      }
+    })
+        .filter(epic -> epic != null)
+        .collect(Collectors.toList());
+    
+    try (ChildIssueKeyToEpicCSVDAO csv =
+        new ChildIssueKeyToEpicCSVDAO(ISSUES_TO_EPIC_CSV_FILENAME, true)) {
+      csv.writeToCSV(newEpics);
+    }
   }
   
 }

@@ -19,9 +19,11 @@ package com.echobox.github.cycletime.enrichment.jira;
 
 import com.chavaillaz.jira.client.IssueClient;
 import com.chavaillaz.jira.client.JiraClient;
-import com.chavaillaz.jira.client.java.JavaHttpJiraClient;
+import com.chavaillaz.jira.client.apache.ApacheHttpJiraClient;
+import com.chavaillaz.jira.domain.Fields;
 import com.chavaillaz.jira.domain.Issue;
 import com.echobox.github.cycletime.data.AnalysedPR;
+import com.echobox.github.cycletime.data.Epic;
 import com.echobox.github.cycletime.enrichment.PREnricher;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,7 +60,7 @@ public class JIRAEpicWorkTypeEnricher implements PREnricher {
   private IssueClient<Issue> issueClient;
   
   public JIRAEpicWorkTypeEnricher(String jiraURL, String jiraLoginEmail, String jiraLoginAPIToken) {
-    client = JavaHttpJiraClient.jiraJavaClient(jiraURL)
+    client = ApacheHttpJiraClient.jiraApacheClient(jiraURL)
         .withAuthentication(jiraLoginEmail, jiraLoginAPIToken);
     issueClient = client.getIssueClient();
   }
@@ -78,29 +80,29 @@ public class JIRAEpicWorkTypeEnricher implements PREnricher {
           + " format.");
     }
     
-    String workType = getEpicWorkTypeForIssueKey(issueKeyFromPRTitle.get());
+    Epic epic = getEpicFromChildIssueKey(issueKeyFromPRTitle.get());
     
-    analysedPR.appendEnrichments(Arrays.asList(workType));
+    analysedPR.appendEnrichments(Arrays.asList(epic.getWorkType()));
   }
   
   /**
    * Determine the epic work type of the provided JIRA issue key. Issue parent links will be
    * followed until we arrive at the associated epic.
-   * @param issueKey
+   * @param childIssueKey
    * @return The work type of the parent issue epic.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public String getEpicWorkTypeForIssueKey(String issueKey)
+  public Epic getEpicFromChildIssueKey(String childIssueKey)
       throws ExecutionException, InterruptedException {
     
-    Issue currentIssue = issueClient.getIssue(issueKey).get();
+    Issue currentIssue = issueClient.getIssue(childIssueKey).get();
     
     while (!getIssueTypeName(currentIssue).equals(EPIC_ISSUE_TYPE_NAME)) {
       currentIssue = issueClient.getIssue(getIssueParentKey(currentIssue)).get();
     }
     
-    return getWorkTypeFieldFromEpicIssue(currentIssue);
+    return getEpicFromEpicIssue(childIssueKey, currentIssue);
   }
   
   public static Optional<String> getIssueKeyFromPRTitle(String prTitle) {
@@ -123,14 +125,16 @@ public class JIRAEpicWorkTypeEnricher implements PREnricher {
     return issue.getFields().getIssueType().getName();
   }
 
-  private static String getWorkTypeFieldFromEpicIssue(Issue epicIssue) {
+  private static Epic getEpicFromEpicIssue(String childIssueKey, Issue epicIssue) {
     if (!getIssueTypeName(epicIssue).equals(EPIC_ISSUE_TYPE_NAME)) {
       throw new IllegalArgumentException("The provided issue is not an EPIC.");
     }
     
-    Map<String, Object> customFields = epicIssue.getFields().getCustomFields();
+    Fields fields = epicIssue.getFields();
+    Map<String, Object> customFields = fields.getCustomFields();
     LinkedHashMap customfield12732 = (LinkedHashMap) customFields.get("customfield_12732");
     String workType = (String) customfield12732.get("value");
-    return workType;
+    
+    return new Epic(childIssueKey, epicIssue.getKey(), fields.getSummary(), workType);
   }
 }
