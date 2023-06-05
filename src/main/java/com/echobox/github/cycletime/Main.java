@@ -17,6 +17,7 @@
 
 package com.echobox.github.cycletime;
 
+import com.chavaillaz.jira.domain.Issue;
 import com.echobox.github.cycletime.analyse.AnalysisCleanup;
 import com.echobox.github.cycletime.analyse.OrgAnalyser;
 import com.echobox.github.cycletime.analyse.PRAnalyser;
@@ -28,6 +29,7 @@ import com.echobox.github.cycletime.data.Epic;
 import com.echobox.github.cycletime.data.PreferredAuthorNamesCSVDAO;
 import com.echobox.github.cycletime.data.PullRequestCSVDAO;
 import com.echobox.github.cycletime.enrichment.jira.JIRAEpicWorkTypeEnricher;
+import com.echobox.github.cycletime.enrichment.jira.JIRAQueryHelper;
 import com.echobox.github.cycletime.providers.kohsuke.PullRequestKohsuke;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
@@ -50,6 +52,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -104,7 +107,7 @@ public class Main {
 //    performExportAndAnalysis(githubOrg);
 //    cleanupAnalysis();
 //    aggregateCycleTimes();
-    
+
     buildEpicTypesFromIssueKeys();
   
     GHRateLimit rateLimitEnd = github.getRateLimit();
@@ -204,54 +207,77 @@ public class Main {
 
   private static void buildEpicTypesFromIssueKeys() throws Exception  {
     
-    List<String> distinctIssueKeys;
+    Set<String> issueKeysToUpdate;
     try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
         true)) {
       List<AnalysedPR> uncleanedPRs = csv.loadAllData();
-      distinctIssueKeys = uncleanedPRs.stream()
+      issueKeysToUpdate = uncleanedPRs.stream()
           .map(pr -> pr.getPrTitle())
           .map(JIRAEpicWorkTypeEnricher::getIssueKeyFromPRTitle)
           .filter(Optional::isPresent).map(Optional::get)
-          .distinct().collect(Collectors.toList());
+          .collect(Collectors.toSet());
       LOGGER.debug("Loaded " + uncleanedPRs.size() + " PRs");
     }
 
+    //Get issue keys for
+    //  Planed tickets for known projects
+    //  R&D tickets
+    
     String jiraURL = System.getenv("JIRA_URL");
     String jiraLoginEmail = System.getenv("JIRA_EMAIL");
     String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
+
+    String plannedTicketSearchQuery = "project in (BM, PW, SL, NL, SDK) AND "
+        + "issuetype IN (Implementation, \"Implementation (Spec Gap)\", \"R&D\") and "
+        + "status != \"Wont Fix\" AND summary !~ plan AND summary !~ Planning AND "
+        + "summary !~ \"create technical\" "
+        + "AND created >= \"2023-01-01 00:00\" AND created <= \"2023-12-31 23:59\" ";
     
-    JIRAEpicWorkTypeEnricher enricher =
-        new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
+    String rdTicketSearchQuery = "project in (BM, PW, NL, SL, SDK) AND "
+        + "issuetype IN (\"R&D\") AND status IN (Done, Resolved) "
+        + "AND updated >= \"2023-01-01 00:00\" AND updated <= \"2023-12-31 23:59\" ";
     
-    //Get issue keys for
-    //  HELP Tickets
-    //  Planed tickets for known projects
-    //  R&D tickets
+    JIRAQueryHelper queryTool = new JIRAQueryHelper(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
+    List<Issue> plannedIssues = queryTool.executeQuery(plannedTicketSearchQuery);
+    List<Issue> rdIssues = queryTool.executeQuery(rdTicketSearchQuery);
+
+    issueKeysToUpdate.addAll(plannedIssues.stream().map(i -> i.getKey()).collect(
+        Collectors.toList()));
+    issueKeysToUpdate.addAll(rdIssues.stream().map(i -> i.getKey()).collect(
+        Collectors.toList()));
     
     //Load previously converted issue keys to epics.
     //Determine what's new, get the epic types for those
     //Save out the updated data
-    
-    Map<String, Epic> knownIssueToEpicMap;
+    boolean writeHeaders = !new File(ISSUES_TO_EPIC_CSV_FILENAME).exists();
+
+    Map<String, Epic> knownIssueKeyToEpicMap;
     try (ChildIssueKeyToEpicCSVDAO csv =
         new ChildIssueKeyToEpicCSVDAO(ISSUES_TO_EPIC_CSV_FILENAME, true)) {
-      knownIssueToEpicMap = csv.loadAllEpics();
+      if (writeHeaders) {
+        csv.writeCSVHeader();
+      }
+      knownIssueKeyToEpicMap = csv.loadAllEpics();
     }
     
     //Remove known keys
-    distinctIssueKeys.removeAll(knownIssueToEpicMap.keySet());
+    issueKeysToUpdate.removeAll(knownIssueKeyToEpicMap.keySet());
+
+    JIRAEpicWorkTypeEnricher enricher =
+        new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
     
     //Get the new epics
-    List<Epic> newEpics = distinctIssueKeys.stream().parallel().map(childIssueKey -> {
-      try {
-        Epic epic = enricher.getEpicFromChildIssueKey(childIssueKey);
-        LOGGER.debug("Retrieved epic for child key " + childIssueKey);
-        return epic;
-      } catch (Exception ex) {
-        LOGGER.error("** Failed to determine epic for child key " + childIssueKey, ex);
-        return null;
-      }
-    })
+    List<Epic> newEpics = issueKeysToUpdate.stream().parallel()
+        .map(childIssueKey -> {
+          try {
+            Epic epic = enricher.getEpicFromChildIssueKey(childIssueKey);
+            LOGGER.debug("Retrieved epic for child key " + childIssueKey);
+            return epic;
+          } catch (Exception ex) {
+            LOGGER.error("** Failed to determine epic for child key " + childIssueKey, ex);
+            return new Epic(childIssueKey, "NA", "", "");
+          }
+        })
         .filter(epic -> epic != null)
         .collect(Collectors.toList());
     

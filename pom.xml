@@ -58,6 +58,17 @@
             <version>1.313</version>
         </dependency>
         <dependency>
+            <groupId>com.chavaillaz</groupId>
+            <artifactId>jira-client</artifactId>
+            <version>1.1.5</version>
+        </dependency>
+        <!-- Required as optional dependency include for jira-client -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.2.1</version>
+        </dependency>
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>31.1-jre</version>
@@ -71,11 +82,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>1.9.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.chavaillaz</groupId>
-            <artifactId>jira-client</artifactId>
-            <version>1.1.4</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -117,20 +123,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.4.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
