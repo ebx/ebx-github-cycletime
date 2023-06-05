@@ -50,7 +50,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -78,13 +77,31 @@ public class Main {
   private static final String SORTED_CSV_FILENAME_FILTERED_AUTHORS =
       "export_sorted_by_mergedate_filteredauthors.csv";
   
-  private static final String ISSUES_TO_EPIC_CSV_FILENAME = "childissues_to_epic.csv";
-  
   private static final String PREFERRED_AUTHOR_NAMES_CSV = "preferred_author_names.csv";
   private static final String AUTHOR_NAMES_TO_SQUADS_CSV = "author_names_to_squads.csv";
   
   private static final String CYCLE_TIME_SQUAD_NAME_POSTFIX = "_squad_cycle_times_hours.csv";
-
+  
+  private static final String ISSUES_TO_EPIC_CSV_FILENAME = "childissues_to_epic.csv";
+  
+  /**
+   * The JIRA JQL that can be used to determine all planned tickets. This is quite implementation
+   * specific to Echobox so likely needs improving in a future iteration.
+   */
+  private static String JIRA_IMPLEMENTATION_TICKETS_JQL = "project in (BM, PW, SL, NL, SDK) AND "
+      + "issuetype IN (Implementation, \"Implementation (Spec Gap)\", \"R&D\") and "
+      + "status != \"Wont Fix\" AND summary !~ plan AND summary !~ Planning AND "
+      + "summary !~ \"create technical\" "
+      + "AND created >= \"2023-01-01 00:00\" AND created <= \"2023-12-31 23:59\" ";
+  
+  /**
+   * The JIRA JQL that can be used to determine all R&D tickets. This is quite implementation
+   * specific to Echobox so likely needs improving in a future iteration.
+   */
+  private static String JIRA_R_D_TICKETS_JQL = "project in (BM, PW, NL, SL, SDK) AND "
+      + "issuetype IN (\"R&D\") AND status IN (Done, Resolved) "
+      + "AND updated >= \"2023-01-01 00:00\" AND updated <= \"2023-12-31 23:59\" ";
+  
   public static void main(String[] args) throws Exception {
 
     LOGGER.info("Starting ...");
@@ -104,11 +121,11 @@ public class Main {
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
     
-//    performExportAndAnalysis(githubOrg);
-//    cleanupAnalysis();
-//    aggregateCycleTimes();
+    performExportAndAnalysis(githubOrg);
+    cleanupAnalysis();
+    aggregateCycleTimes();
 
-    buildEpicTypesFromIssueKeys();
+    buildEpicTypesFromIssueKeysExport();
   
     GHRateLimit rateLimitEnd = github.getRateLimit();
     int usedRateLimit =
@@ -205,7 +222,17 @@ public class Main {
     analyser.analyse();
   }
 
-  private static void buildEpicTypesFromIssueKeys() throws Exception  {
+  private static void buildEpicTypesFromIssueKeysExport() throws Exception  {
+    
+    String jiraURL = System.getenv("JIRA_URL");
+    String jiraLoginEmail = System.getenv("JIRA_EMAIL");
+    String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
+    
+    if (StringUtils.isEmpty(jiraURL) || StringUtils.isEmpty(jiraLoginEmail)
+        || StringUtils.isEmpty(jiraLoginAPIToken)) {
+      LOGGER.warn("Not building epic types from issue keys export as jiraURL, jiraLoginEmail or "
+          + "jiraLoginAPIToken env variable are missing.");
+    }
     
     Set<String> issueKeysToUpdate;
     try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
@@ -222,51 +249,33 @@ public class Main {
     //Get issue keys for
     //  Planed tickets for known projects
     //  R&D tickets
-    
-    String jiraURL = System.getenv("JIRA_URL");
-    String jiraLoginEmail = System.getenv("JIRA_EMAIL");
-    String jiraLoginAPIToken = System.getenv("JIRA_API_TOKEN");
-
-    String plannedTicketSearchQuery = "project in (BM, PW, SL, NL, SDK) AND "
-        + "issuetype IN (Implementation, \"Implementation (Spec Gap)\", \"R&D\") and "
-        + "status != \"Wont Fix\" AND summary !~ plan AND summary !~ Planning AND "
-        + "summary !~ \"create technical\" "
-        + "AND created >= \"2023-01-01 00:00\" AND created <= \"2023-12-31 23:59\" ";
-    
-    String rdTicketSearchQuery = "project in (BM, PW, NL, SL, SDK) AND "
-        + "issuetype IN (\"R&D\") AND status IN (Done, Resolved) "
-        + "AND updated >= \"2023-01-01 00:00\" AND updated <= \"2023-12-31 23:59\" ";
-    
     JIRAQueryHelper queryTool = new JIRAQueryHelper(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
-    List<Issue> plannedIssues = queryTool.executeQuery(plannedTicketSearchQuery);
-    List<Issue> rdIssues = queryTool.executeQuery(rdTicketSearchQuery);
+    List<Issue> plannedIssues = queryTool.executeQuery(JIRA_IMPLEMENTATION_TICKETS_JQL);
+    List<Issue> rdIssues = queryTool.executeQuery(JIRA_R_D_TICKETS_JQL);
 
     issueKeysToUpdate.addAll(plannedIssues.stream().map(i -> i.getKey()).collect(
         Collectors.toList()));
     issueKeysToUpdate.addAll(rdIssues.stream().map(i -> i.getKey()).collect(
         Collectors.toList()));
     
-    //Load previously converted issue keys to epics.
-    //Determine what's new, get the epic types for those
-    //Save out the updated data
+    //Load all issue keys previously saved
     boolean writeHeaders = !new File(ISSUES_TO_EPIC_CSV_FILENAME).exists();
-
-    Map<String, Epic> knownIssueKeyToEpicMap;
+    Set<String> issueKeysPreviouslySaved;
     try (ChildIssueKeyToEpicCSVDAO csv =
         new ChildIssueKeyToEpicCSVDAO(ISSUES_TO_EPIC_CSV_FILENAME, true)) {
       if (writeHeaders) {
         csv.writeCSVHeader();
       }
-      knownIssueKeyToEpicMap = csv.loadAllEpics();
+      issueKeysPreviouslySaved = csv.loadAllEpics().keySet();
     }
     
     //Remove known keys
-    issueKeysToUpdate.removeAll(knownIssueKeyToEpicMap.keySet());
+    issueKeysToUpdate.removeAll(issueKeysPreviouslySaved);
 
     JIRAEpicWorkTypeEnricher enricher =
         new JIRAEpicWorkTypeEnricher(jiraURL, jiraLoginEmail, jiraLoginAPIToken);
     
-    //Get the new epics
+    //Get the required data for any missing child issue keys
     List<Epic> newEpics = issueKeysToUpdate.stream().parallel()
         .map(childIssueKey -> {
           try {
@@ -281,6 +290,7 @@ public class Main {
         .filter(epic -> epic != null)
         .collect(Collectors.toList());
     
+    //Append the new data to the results list
     try (ChildIssueKeyToEpicCSVDAO csv =
         new ChildIssueKeyToEpicCSVDAO(ISSUES_TO_EPIC_CSV_FILENAME, true)) {
       csv.writeToCSV(newEpics);
