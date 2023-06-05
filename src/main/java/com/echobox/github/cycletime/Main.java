@@ -121,8 +121,8 @@ public class Main {
     LOGGER.debug("Rate limit remaining in current hour window - "
         + rateLimitStart.getCore().getRemaining());
     
-    performExportAndAnalysis(githubOrg);
-    cleanupAnalysis();
+    performExportAndBaseAnalysis(githubOrg);
+    analysisCleanup();
     aggregateCycleTimes();
 
     buildEpicTypesFromIssueKeysExport();
@@ -134,7 +134,7 @@ public class Main {
     LOGGER.debug("Done. Used the following rate limit quota - " + usedRateLimit);
   }
   
-  private static void performExportAndAnalysis(GHOrganization githubOrg)
+  private static void performExportAndBaseAnalysis(GHOrganization githubOrg)
       throws Exception {
 
     boolean exportAlreadyExists = new File(RAW_CSV_FILENAME).exists();
@@ -171,7 +171,7 @@ public class Main {
     }
   }
 
-  private static void cleanupAnalysis() throws Exception {
+  private static void analysisCleanup() throws Exception {
 
     List<AnalysedPR> uncleanedPRs;
     try (PullRequestCSVDAO csv = new PullRequestCSVDAO(RAW_CSV_FILENAME, persistWithTimezone,
