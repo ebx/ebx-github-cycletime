@@ -69,8 +69,7 @@ Required environment variable keys, with examples are:
 
 * JIRA_URL = https://yourdomain.atlassian.net
 * JIRA_EMAIL = marc@yourdomain.com
-* JIRA_API_TOKEN = (can be created here - https://id.atlassian.
-  com/manage-profile/security/api-tokens)
+* JIRA_API_TOKEN = (can be created here - https://id.atlassian.com/manage-profile/security/api-tokens)
 
 ### Helpful notes:
 
