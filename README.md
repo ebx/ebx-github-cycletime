@@ -63,7 +63,7 @@ We've added basic support to retrieve data from JIRA, a proof of concept
 if you will. If JIRA credentials (as environment variables) are provided and PR titles are in the 
 expected JIRAEpicWorkTypeEnricher.EXPECTED_ISSUE_KEY_PATTERN the default app configuration will 
 build a list of all issue keys and their associated parent epic. Exported as childissues_to_epic.csv. 
-Any existing  file is used as a cache on subsequent executions to avoid repeating the same lookups.
+Any existing file is used as a cache on subsequent executions to avoid repeating the same lookups.
 
 Required environment variable keys, with examples are:
 
