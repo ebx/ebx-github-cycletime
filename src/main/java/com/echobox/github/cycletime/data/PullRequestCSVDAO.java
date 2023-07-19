@@ -34,6 +34,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -52,6 +53,8 @@ public class PullRequestCSVDAO implements AutoCloseable {
   private static final DateTimeFormatter fullFormat = DateTimeFormatter.ofPattern(ISO_FORMAT);
   private static final DateTimeFormatter monthOnlyFormat = DateTimeFormatter.ofPattern("MM");
 
+  private static final int MAX_REVIEWS = 6;
+  
   private final Writer csvWriter;
   private final Reader csvReader;
   private final ZoneId persistWithTimezone;
@@ -72,10 +75,26 @@ public class PullRequestCSVDAO implements AutoCloseable {
    * @throws IOException If the write fails
    */
   public synchronized void writeCSVHeader() throws IOException {
-    csvWriter.write("UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,"
-        + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6\n");
+    writeCSVHeader(new ArrayList<>());
   }
   
+  /**
+   * Write the CSV header for PR analysis
+   * @param additionalHeaders Append the additional heads to the end of the standard ones
+   * @throws IOException If the write fails
+   */
+  public synchronized void writeCSVHeader(List<String> additionalHeaders) throws IOException {
+    
+    String headers = "UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,"
+        + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6";
+    
+    if (additionalHeaders != null && !additionalHeaders.isEmpty()) {
+      headers += "," + additionalHeaders.stream().collect(Collectors.joining(","));
+    }
+    
+    csvWriter.write(headers + "\n");
+  }
+
   public synchronized void writeToCSV(List<AnalysedPR> analysedPRs,
       Map<String, String> preferredAuthorNames) throws IOException {
     for (AnalysedPR analysedPR : analysedPRs) {
@@ -96,19 +115,27 @@ public class PullRequestCSVDAO implements AutoCloseable {
     String repoNum = analysedPR.getRepoName() + "/" + analysedPR.getPrNum();
     String safeCSVTitle = StringEscapeUtils.escapeCsv(analysedPR.getPrTitle());
     String authorName = analysedPR.getPrAuthorStr();
-  
-    Stream<String> reviewedByStream = analysedPR.getPrReviewedByList().stream();
+    
+    List<String> prReviewedByList = analysedPR.getPrReviewedByList();
+    Stream<String> reviewedByStream = prReviewedByList.stream().limit(MAX_REVIEWS);
     
     if (preferredAuthorNames != null) {
       authorName = preferredAuthorNames.getOrDefault(authorName, authorName);
       reviewedByStream = reviewedByStream.map(n -> preferredAuthorNames.getOrDefault(n, n));
     }
-  
-    String reviewUserNameStr = reviewedByStream.collect(Collectors.joining(","));
+
+    String reviewUserNameStr = reviewedByStream.collect(Collectors.joining(",")) + ",";
+    
+    //Ensure we fill out the columns in the CSV with empty data if needed
+    if (prReviewedByList.size() < MAX_REVIEWS) {
+      reviewUserNameStr += Collections.nCopies(
+          MAX_REVIEWS - Math.max(prReviewedByList.size(), 1), "")
+          .stream().collect(Collectors.joining(","));
+    }
     
     ZonedDateTime dtToPrint = analysedPR.getMergedAtDate().withZoneSameInstant(persistWithTimezone);
     
-    csvWriter.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+    String csvLineToWrite = String.format("%s,%s,%s,%s,%s,%s,%s,%s,%s",
         fullFormat.format(dtToPrint),
         monthOnlyFormat.format(dtToPrint),
         repoNum,
@@ -117,8 +144,16 @@ public class PullRequestCSVDAO implements AutoCloseable {
         analysedPR.getCodingTimeSecs(),
         analysedPR.getPickupTimeSecs(),
         analysedPR.getReviewTimeSecs(),
-        reviewUserNameStr));
-  
+        reviewUserNameStr);
+    
+    if (analysedPR.getAdditionalEnrichments() != null) {
+      for (String element : analysedPR.getAdditionalEnrichments()) {
+        csvLineToWrite += String.format(",%s", element);
+      }
+    }
+    
+    csvWriter.write(csvLineToWrite + "\n");
+
     csvWriter.flush();
     if (analysedPRs != null) {
       analysedPRs.add(analysedPR);

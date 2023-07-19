@@ -17,47 +17,18 @@
 
 package com.echobox.github.cycletime.data;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
-
-import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Getter
 @Setter
-@RequiredArgsConstructor
-public class AnalysedPR {
+@AllArgsConstructor
+public class Epic {
   
-  @NonNull
-  private String repoName;
-  @NonNull
-  private ZonedDateTime mergedAtDate;
-  @NonNull
-  private int prNum;
-  @NonNull
-  private String prTitle;
-  @NonNull
-  private String prAuthorStr;
-  @NonNull
-  private long codingTimeSecs;
-  @NonNull
-  private long pickupTimeSecs;
-  @NonNull
-  private long reviewTimeSecs;
-  @NonNull
-  private List<String> prReviewedByList;
-  
-  private List<String> additionalEnrichments;
+  private String childIssueKey;
+  private String epicIssueKey;
+  private String title;
+  private String workType;
 
-  public synchronized void appendEnrichments(List<String> enrichments) {
-    if (additionalEnrichments == null) {
-      additionalEnrichments = new ArrayList<>();
-    }
-    
-    additionalEnrichments.addAll(enrichments);
-  }
-  
 }

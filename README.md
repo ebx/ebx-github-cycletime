@@ -14,7 +14,7 @@ ebx-github-cycletime itself is open source software released under the terms of 
 
 ## Getting Started
 
-At the time of writing the application is intended to be run from source (>=Java 14). Use the 
+At the time of writing the application is intended to be run from source (>=Java 17). Use the 
 following steps to get started:
 
 1. Download the source.
@@ -56,6 +56,20 @@ analyser.analyse();
 // Then define what you want to do with the analysis
 // ...
 ```
+
+### (Optional) Integrating with JIRA data
+
+We've added basic support to retrieve data from JIRA, a proof of concept 
+if you will. If JIRA credentials (as environment variables) are provided and PR titles are in the 
+expected JIRAEpicWorkTypeEnricher.EXPECTED_ISSUE_KEY_PATTERN the default app configuration will 
+build a list of all issue keys and their associated parent epic. Exported as childissues_to_epic.csv. 
+Any existing file is used as a cache on subsequent executions to avoid repeating the same lookups.
+
+Required environment variable keys, with examples are:
+
+* JIRA_URL = https://yourdomain.atlassian.net
+* JIRA_EMAIL = marc@yourdomain.com
+* JIRA_API_TOKEN = (can be created here - https://id.atlassian.com/manage-profile/security/api-tokens)
 
 ### Helpful notes:
 
