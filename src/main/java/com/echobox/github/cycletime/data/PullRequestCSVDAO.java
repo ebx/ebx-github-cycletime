@@ -88,7 +88,7 @@ public class PullRequestCSVDAO implements AutoCloseable {
     String headers = "UTCMergedDateTime,MonthIndex,Repo-PRNum,Title,PRAuthor,CodingTimeSecs,"
         + "PickupTimeSecs,ReviewTimeSecs,Review1,Review2,Review3,Review4,Review5,Review6";
     
-    if (additionalHeaders != null) {
+    if (additionalHeaders != null && !additionalHeaders.isEmpty()) {
       headers += "," + additionalHeaders.stream().collect(Collectors.joining(","));
     }
     
