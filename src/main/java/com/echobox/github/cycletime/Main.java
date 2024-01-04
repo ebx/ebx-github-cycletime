@@ -92,7 +92,7 @@ public class Main {
       + "issuetype IN (Implementation, \"Implementation (Spec Gap)\", \"R&D\") and "
       + "status != \"Wont Fix\" AND summary !~ plan AND summary !~ Planning AND "
       + "summary !~ \"create technical\" "
-      + "AND created >= \"2023-01-01 00:00\" AND created <= \"2023-12-31 23:59\" ";
+      + "AND created >= \"2024-01-01 00:00\" AND created <= \"2024-12-31 23:59\" ";
   
   /**
    * The JIRA JQL that can be used to determine all R&D tickets. This is quite implementation
@@ -100,7 +100,7 @@ public class Main {
    */
   private static String JIRA_R_D_TICKETS_JQL = "project in (BM, PW, NL, SL, SDK) AND "
       + "issuetype IN (\"R&D\") AND status IN (Done, Resolved) "
-      + "AND updated >= \"2023-01-01 00:00\" AND updated <= \"2023-12-31 23:59\" ";
+      + "AND updated >= \"2024-01-01 00:00\" AND updated <= \"2024-12-31 23:59\" ";
   
   public static void main(String[] args) throws Exception {
 
