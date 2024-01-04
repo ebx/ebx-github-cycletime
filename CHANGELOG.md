@@ -10,3 +10,7 @@
 * Added optional analyser classes to allow for additional PR enrichment. For example with JIRA data.
 * After PR exports creates a cross reference lookup document named childissues_to_epic.csv which 
   can be used to determine work types for all tracked issues.
+
+## 2.0.1 (Jan 4, 2024)
+
+* Update the JQL statements to select 2024 issues only
