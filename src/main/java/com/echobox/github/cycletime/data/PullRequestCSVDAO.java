@@ -189,7 +189,9 @@ public class PullRequestCSVDAO implements AutoCloseable {
     Iterable<CSVRecord> records = format.parse(csvReader);
   
     analysedPRs =  StreamSupport.stream(records.spliterator(), false)
-        .map(r -> parseRecord(r))
+        .map(this::parseRecord)
+        // PRs with the title containing the word 'revert' should be excluded from the exports
+        .filter(pr -> !pr.getPrTitle().toLowerCase().contains("revert"))
         .collect(Collectors.toList());
     
     return analysedPRs;

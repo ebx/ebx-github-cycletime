@@ -19,3 +19,5 @@
 
 * `export_sorted_by_mergedate.csv` and `export_sorted_by_mergedate` will only include distinct 
   PR reviewers.
+* `export_sorted_by_mergedate.csv` and `export_sorted_by_mergedate` will exclude revert PRs by 
+  excluding PRs with the word 'revert' in the title.
