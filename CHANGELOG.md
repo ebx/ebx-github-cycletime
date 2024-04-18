@@ -14,3 +14,8 @@
 ## 2.0.1 (Jan 4, 2024)
 
 * Update the JQL statements to select 2024 issues only
+
+## 2.0.2 (April 18, 2024)
+
+* `export_sorted_by_mergedate.csv` and `export_sorted_by_mergedate` will only include distinct 
+  PR reviewers.
