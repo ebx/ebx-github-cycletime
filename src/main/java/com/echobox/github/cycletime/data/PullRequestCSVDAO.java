@@ -116,7 +116,10 @@ public class PullRequestCSVDAO implements AutoCloseable {
     String safeCSVTitle = StringEscapeUtils.escapeCsv(analysedPR.getPrTitle());
     String authorName = analysedPR.getPrAuthorStr();
     
-    List<String> prReviewedByList = analysedPR.getPrReviewedByList();
+    // Filter for distinct reviewers
+    List<String> prReviewedByList = analysedPR.getPrReviewedByList().stream()
+        .distinct()
+        .collect(Collectors.toList());
     Stream<String> reviewedByStream = prReviewedByList.stream().limit(MAX_REVIEWS);
     
     if (preferredAuthorNames != null) {
