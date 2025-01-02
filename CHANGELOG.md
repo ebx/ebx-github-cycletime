@@ -21,3 +21,7 @@
   PR reviewers.
 * `export_sorted_by_mergedate.csv` and `export_sorted_by_mergedate` will exclude revert PRs by
   excluding PRs with the word 'revert' in the title.
+
+## 2.0.1 (Jan 2, 2025)
+
+* Update the JQL statements to select 2025 issues only
