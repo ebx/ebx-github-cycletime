@@ -50,7 +50,8 @@ public class OrgAnalyser {
 
   public void analyseOrg() throws IOException {
     PagedIterable<GHRepository> ghRepositories = githubOrg.listRepositories();
-    ghRepositories.toList().parallelStream().forEach(ghRepository -> {
+    // Warning, adding parallelization can result in too many open streams errors in HttpClient
+    ghRepositories.toList().stream().forEach(ghRepository -> {
       RepoAnalyser repoAnalyser = new RepoAnalyser(ghRepository, considerOnlyPRsMergedAfterUnixTime,
           considerOnlyPRsMergedBeforeUnixTime, csv);
       repoAnalyser.analyseRepo();
