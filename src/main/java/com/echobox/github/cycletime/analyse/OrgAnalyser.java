@@ -25,6 +25,7 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.PagedIterable;
 
 import java.io.IOException;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * Given a github organisation process all available repositories
@@ -51,10 +52,19 @@ public class OrgAnalyser {
   public void analyseOrg() throws IOException {
     PagedIterable<GHRepository> ghRepositories = githubOrg.listRepositories();
     // Warning, adding parallelization can result in too many open streams errors in HttpClient
-    ghRepositories.toList().stream().forEach(ghRepository -> {
-      RepoAnalyser repoAnalyser = new RepoAnalyser(ghRepository, considerOnlyPRsMergedAfterUnixTime,
-          considerOnlyPRsMergedBeforeUnixTime, csv);
-      repoAnalyser.analyseRepo();
-    });
+    ForkJoinPool pool = new ForkJoinPool(5);
+    pool.submit(() -> {
+      try {
+        ghRepositories.toList().parallelStream().forEach(ghRepository -> {
+          RepoAnalyser repoAnalyser =
+              new RepoAnalyser(ghRepository, considerOnlyPRsMergedAfterUnixTime,
+                  considerOnlyPRsMergedBeforeUnixTime, csv);
+          repoAnalyser.analyseRepo();
+        });
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }).join();
+    pool.shutdown();
   }
 }
